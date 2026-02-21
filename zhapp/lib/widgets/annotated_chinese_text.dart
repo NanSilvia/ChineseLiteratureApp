@@ -64,7 +64,8 @@ class _AnnotatedChineseTextState extends State<AnnotatedChineseText> {
   @override
   Widget build(BuildContext context) {
     final baseStyle =
-        widget.style ?? const TextStyle(fontSize: 16, color: Colors.black87);
+        (widget.style ?? const TextStyle(fontSize: 16, color: Colors.black87))
+            .copyWith(height: 1.4);
 
     if (_isLoading) {
       return Column(
@@ -135,7 +136,9 @@ class _AnnotatedChineseTextState extends State<AnnotatedChineseText> {
     List<Map<String, dynamic>> annotations,
     TextStyle baseStyle,
   ) {
-    List<Widget> children = [];
+    // Use RichText with TextSpan/WidgetSpan so all content shares the same
+    // line metrics — no more mismatched heights between Chinese and Latin.
+    List<InlineSpan> spans = [];
     int textIndex = 0;
     int annIndex = 0;
 
@@ -146,22 +149,35 @@ class _AnnotatedChineseTextState extends State<AnnotatedChineseText> {
 
         int wordStart = text.indexOf(wordToFind, textIndex);
         if (wordStart == textIndex) {
-          children.add(AnnotatedWordWidget(annotation: nextAnn));
+          spans.add(
+            WidgetSpan(
+              alignment: PlaceholderAlignment.middle,
+              child: AnnotatedWordWidget(annotation: nextAnn, style: baseStyle),
+            ),
+          );
           textIndex += wordToFind.length;
           annIndex++;
         } else {
-          String char = text[textIndex];
-          children.add(Text(char, style: baseStyle));
-          textIndex++;
+          // Batch consecutive non-annotated characters into one TextSpan.
+          int nextAnnotStart = wordStart >= 0 ? wordStart : text.length;
+          spans.add(
+            TextSpan(
+              text: text.substring(textIndex, nextAnnotStart),
+              style: baseStyle,
+            ),
+          );
+          textIndex = nextAnnotStart;
         }
       } else {
-        String char = text[textIndex];
-        children.add(Text(char, style: baseStyle));
-        textIndex++;
+        // No more annotations — emit the remaining text.
+        spans.add(TextSpan(text: text.substring(textIndex), style: baseStyle));
+        break;
       }
     }
 
-    return Wrap(spacing: 0, runSpacing: 0, children: children);
+    return RichText(
+      text: TextSpan(style: baseStyle, children: spans),
+    );
   }
 
   // ──── Context menu ────
@@ -207,8 +223,9 @@ class _AnnotatedChineseTextState extends State<AnnotatedChineseText> {
 
 class AnnotatedWordWidget extends StatefulWidget {
   final Map<String, dynamic> annotation;
+  final TextStyle? style;
 
-  const AnnotatedWordWidget({Key? key, required this.annotation})
+  const AnnotatedWordWidget({Key? key, required this.annotation, this.style})
     : super(key: key);
 
   @override
@@ -231,20 +248,22 @@ class _AnnotatedWordWidgetState extends State<AnnotatedWordWidget> {
           decoration: BoxDecoration(
             color: _isHovered ? Colors.blue[100] : Colors.transparent,
             borderRadius: BorderRadius.circular(4),
-            border: Border.all(
-              color: _isHovered ? Colors.blue : Colors.transparent,
-              width: 1,
-            ),
+            border: _isHovered
+                ? Border.all(color: Colors.blue, width: 1)
+                : null,
           ),
           child: GestureDetector(
             onTap: () => _showDetailsDialog(context),
             child: Text(
               widget.annotation['word'] as String,
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.black87,
-                fontWeight: _isHovered ? FontWeight.bold : FontWeight.normal,
-              ),
+              style:
+                  (widget.style ??
+                          const TextStyle(fontSize: 16, color: Colors.black87))
+                      .copyWith(
+                        fontWeight: _isHovered
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                      ),
             ),
           ),
         ),
