@@ -139,6 +139,22 @@ class ApiService {
     }
   }
 
+  /// Update an existing card (ONLINE ONLY)
+  Future<ApiResult<CardModel>> updateCard(CardModel card) async {
+    if (_connectivity.isOffline) {
+      return ApiResult.offline();
+    }
+
+    try {
+      // TODO: Replace with actual API call
+      final updated = card.copyWith(updatedAt: DateTime.now());
+      await _db.updateCard(updated);
+      return ApiResult.success(updated);
+    } catch (e) {
+      return ApiResult.error('Failed to update card: $e');
+    }
+  }
+
   /// Delete a card
   Future<ApiResult<bool>> deleteCard(int id) async {
     if (_connectivity.isOffline) {

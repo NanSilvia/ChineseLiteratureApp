@@ -1,8 +1,12 @@
 import 'dart:io';
+import 'dart:math';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
-/// Simple image cropping widget that allows selecting a rectangular region
+/// Image cropping widget with 4-point polygon selection.
+/// Users drag 4 corners to define an arbitrary quadrilateral region,
+/// which is then perspective-corrected (projected) to a rectangle for OCR.
 class ImageCropWidget extends StatefulWidget {
   final String imagePath;
   final Function(File croppedImage)? onCropComplete;
@@ -20,12 +24,14 @@ class ImageCropWidget extends StatefulWidget {
 }
 
 class _ImageCropWidgetState extends State<ImageCropWidget> {
-  Rect _cropRect = Rect.zero;
+  /// Four corner points in display coordinates: TL, TR, BR, BL (clockwise).
+  List<Offset> _corners = [];
   Size _imageSize = Size.zero;
   Size _displaySize = Size.zero;
   bool _isLoading = true;
   bool _isCropping = false;
   ui.Image? _uiImage;
+  int? _activeCorner; // index of corner currently being dragged
 
   @override
   void initState() {
@@ -49,72 +55,120 @@ class _ImageCropWidgetState extends State<ImageCropWidget> {
     });
   }
 
-  void _initCropRect(Size displaySize) {
-    if (_cropRect == Rect.zero && displaySize != Size.zero) {
-      // Default crop rect is 80% of the image centered
-      final margin = displaySize.width * 0.1;
-      _cropRect = Rect.fromLTWH(
-        margin,
-        margin,
-        displaySize.width - margin * 2,
-        displaySize.height - margin * 2,
-      );
-      _displaySize = displaySize;
+  void _initCorners(Size displaySize) {
+    _displaySize = displaySize;
+    if (_corners.isEmpty && displaySize != Size.zero) {
+      final mx = displaySize.width * 0.1;
+      final my = displaySize.height * 0.1;
+      _corners = [
+        Offset(mx, my), // top-left
+        Offset(displaySize.width - mx, my), // top-right
+        Offset(displaySize.width - mx, displaySize.height - my), // bottom-right
+        Offset(mx, displaySize.height - my), // bottom-left
+      ];
     }
   }
 
+  /// Find the nearest corner within a touch threshold.
+  int? _hitTestCorner(Offset point) {
+    const threshold = 40.0;
+    double minDist = double.infinity;
+    int? closest;
+    for (int i = 0; i < _corners.length; i++) {
+      final d = (_corners[i] - point).distance;
+      if (d < minDist && d < threshold) {
+        minDist = d;
+        closest = i;
+      }
+    }
+    return closest;
+  }
+
+  // ─────────────── Perspective crop ───────────────
+
   Future<void> _performCrop() async {
     if (_uiImage == null) return;
-
     setState(() => _isCropping = true);
 
     try {
-      // Calculate the actual crop rectangle in image coordinates
+      // Map display-space corners to image-pixel coordinates
       final scaleX = _imageSize.width / _displaySize.width;
       final scaleY = _imageSize.height / _displaySize.height;
+      final imgCorners = _corners
+          .map((c) => Offset(c.dx * scaleX, c.dy * scaleY))
+          .toList();
 
-      final srcRect = Rect.fromLTWH(
-        _cropRect.left * scaleX,
-        _cropRect.top * scaleY,
-        _cropRect.width * scaleX,
-        _cropRect.height * scaleY,
-      );
+      // Output size derived from average edge lengths
+      final topEdge = (imgCorners[1] - imgCorners[0]).distance;
+      final bottomEdge = (imgCorners[2] - imgCorners[3]).distance;
+      final leftEdge = (imgCorners[3] - imgCorners[0]).distance;
+      final rightEdge = (imgCorners[2] - imgCorners[1]).distance;
 
-      // Create a cropped image
+      int outW = ((topEdge + bottomEdge) / 2).round();
+      int outH = ((leftEdge + rightEdge) / 2).round();
+
+      // Cap for performance
+      const maxDim = 2000;
+      if (outW > maxDim || outH > maxDim) {
+        final s = maxDim / max(outW, outH);
+        outW = (outW * s).round();
+        outH = (outH * s).round();
+      }
+      if (outW < 10) outW = 10;
+      if (outH < 10) outH = 10;
+
+      // Destination rectangle corners
+      final rectCorners = [
+        const Offset(0, 0),
+        Offset(outW.toDouble(), 0),
+        Offset(outW.toDouble(), outH.toDouble()),
+        Offset(0, outH.toDouble()),
+      ];
+
+      // Forward homography: image coords → output coords
+      final h = _computeHomography(imgCorners, rectCorners);
+
+      // Embed 3×3 homography in a 4×4 column-major matrix
+      final m = Float64List(16);
+      m[0] = h[0];
+      m[1] = h[3];
+      m[2] = 0;
+      m[3] = h[6];
+      m[4] = h[1];
+      m[5] = h[4];
+      m[6] = 0;
+      m[7] = h[7];
+      m[8] = 0;
+      m[9] = 0;
+      m[10] = 1;
+      m[11] = 0;
+      m[12] = h[2];
+      m[13] = h[5];
+      m[14] = 0;
+      m[15] = 1;
+
+      // Render the perspective-corrected image
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder);
-
-      final paint = Paint()..filterQuality = FilterQuality.high;
-
-      canvas.drawImageRect(
+      canvas.clipRect(Rect.fromLTWH(0, 0, outW.toDouble(), outH.toDouble()));
+      canvas.transform(m);
+      canvas.drawImage(
         _uiImage!,
-        srcRect,
-        Rect.fromLTWH(0, 0, srcRect.width, srcRect.height),
-        paint,
+        Offset.zero,
+        Paint()..filterQuality = FilterQuality.high,
       );
 
       final picture = recorder.endRecording();
-      final croppedImage = await picture.toImage(
-        srcRect.width.toInt(),
-        srcRect.height.toInt(),
-      );
+      final outImage = await picture.toImage(outW, outH);
 
-      // Convert to PNG bytes
-      final byteData = await croppedImage.toByteData(
-        format: ui.ImageByteFormat.png,
-      );
+      final pngData = await outImage.toByteData(format: ui.ImageByteFormat.png);
+      if (pngData == null) throw Exception('Failed to encode image');
 
-      if (byteData == null) {
-        throw Exception('Failed to encode cropped image');
-      }
-
-      // Save to a new temporary file
-      final originalFile = File(widget.imagePath);
-      final directory = originalFile.parent;
-      final croppedPath =
-          '${directory.path}/cropped_${DateTime.now().millisecondsSinceEpoch}.png';
-      final croppedFile = File(croppedPath);
-      await croppedFile.writeAsBytes(byteData.buffer.asUint8List());
+      final dir = File(widget.imagePath).parent;
+      final path =
+          '${dir.path}/cropped_${DateTime.now().millisecondsSinceEpoch}.png';
+      final croppedFile = File(path);
+      await croppedFile.writeAsBytes(pngData.buffer.asUint8List());
 
       widget.onCropComplete?.call(croppedFile);
     } catch (e) {
@@ -129,6 +183,73 @@ class _ImageCropWidgetState extends State<ImageCropWidget> {
     }
   }
 
+  // ─────────────── Homography math ───────────────
+
+  /// Compute the 3×3 homography that maps [src] points to [dst] points.
+  /// Returns the 8 coefficients [h0..h7] with h8 normalised to 1.
+  List<double> _computeHomography(List<Offset> src, List<Offset> dst) {
+    assert(src.length == 4 && dst.length == 4);
+
+    final a = List.generate(8, (_) => List.filled(8, 0.0));
+    final b = List.filled(8, 0.0);
+
+    for (int i = 0; i < 4; i++) {
+      final sx = src[i].dx, sy = src[i].dy;
+      final dx = dst[i].dx, dy = dst[i].dy;
+
+      a[2 * i] = [sx, sy, 1, 0, 0, 0, -dx * sx, -dx * sy];
+      b[2 * i] = dx;
+
+      a[2 * i + 1] = [0, 0, 0, sx, sy, 1, -dy * sx, -dy * sy];
+      b[2 * i + 1] = dy;
+    }
+
+    return _gaussianElimination(a, b);
+  }
+
+  /// Solve A·x = b via Gaussian elimination with partial pivoting.
+  List<double> _gaussianElimination(List<List<double>> a, List<double> b) {
+    final n = b.length;
+    final aug = List.generate(n, (i) => [...a[i], b[i]]);
+
+    for (int col = 0; col < n; col++) {
+      // Pivot
+      int maxRow = col;
+      double maxVal = aug[col][col].abs();
+      for (int row = col + 1; row < n; row++) {
+        if (aug[row][col].abs() > maxVal) {
+          maxVal = aug[row][col].abs();
+          maxRow = row;
+        }
+      }
+      if (maxRow != col) {
+        final tmp = aug[col];
+        aug[col] = aug[maxRow];
+        aug[maxRow] = tmp;
+      }
+      // Eliminate
+      for (int row = col + 1; row < n; row++) {
+        final f = aug[row][col] / aug[col][col];
+        for (int j = col; j <= n; j++) {
+          aug[row][j] -= f * aug[col][j];
+        }
+      }
+    }
+
+    // Back-substitute
+    final x = List.filled(n, 0.0);
+    for (int i = n - 1; i >= 0; i--) {
+      x[i] = aug[i][n];
+      for (int j = i + 1; j < n; j++) {
+        x[i] -= aug[i][j] * x[j];
+      }
+      x[i] /= aug[i][i];
+    }
+    return x;
+  }
+
+  // ─────────────── Build UI ───────────────
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -140,49 +261,53 @@ class _ImageCropWidgetState extends State<ImageCropWidget> {
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              // Calculate display size maintaining aspect ratio
               final aspectRatio = _imageSize.width / _imageSize.height;
-              double displayWidth = constraints.maxWidth;
-              double displayHeight = displayWidth / aspectRatio;
-
-              if (displayHeight > constraints.maxHeight) {
-                displayHeight = constraints.maxHeight;
-                displayWidth = displayHeight * aspectRatio;
+              double dw = constraints.maxWidth;
+              double dh = dw / aspectRatio;
+              if (dh > constraints.maxHeight) {
+                dh = constraints.maxHeight;
+                dw = dh * aspectRatio;
               }
-
-              final displaySize = Size(displayWidth, displayHeight);
-              _initCropRect(displaySize);
+              _initCorners(Size(dw, dh));
 
               return Center(
                 child: SizedBox(
-                  width: displayWidth,
-                  height: displayHeight,
-                  child: Stack(
-                    children: [
-                      // Image
-                      Image.file(
-                        File(widget.imagePath),
-                        width: displayWidth,
-                        height: displayHeight,
-                        fit: BoxFit.contain,
-                      ),
-                      // Darkened overlay outside crop area
-                      CustomPaint(
-                        size: displaySize,
-                        painter: _CropOverlayPainter(_cropRect),
-                      ),
-                      // Crop rectangle border
-                      Positioned.fromRect(
-                        rect: _cropRect,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.white, width: 2),
-                          ),
+                  width: dw,
+                  height: dh,
+                  child: GestureDetector(
+                    onPanStart: (d) {
+                      _activeCorner = _hitTestCorner(d.localPosition);
+                    },
+                    onPanUpdate: (d) {
+                      if (_activeCorner != null) {
+                        setState(() {
+                          _corners[_activeCorner!] = Offset(
+                            d.localPosition.dx.clamp(0, dw),
+                            d.localPosition.dy.clamp(0, dh),
+                          );
+                        });
+                      }
+                    },
+                    onPanEnd: (_) => _activeCorner = null,
+                    child: Stack(
+                      children: [
+                        // Source image
+                        Image.file(
+                          File(widget.imagePath),
+                          width: dw,
+                          height: dh,
+                          fit: BoxFit.contain,
                         ),
-                      ),
-                      // Corner handles
-                      ..._buildCornerHandles(displaySize),
-                    ],
+                        // Darkened overlay outside the polygon
+                        if (_corners.length == 4)
+                          CustomPaint(
+                            size: Size(dw, dh),
+                            painter: _PolygonOverlayPainter(_corners),
+                          ),
+                        // Corner handles
+                        ..._buildHandles(),
+                      ],
+                    ),
                   ),
                 ),
               );
@@ -234,182 +359,96 @@ class _ImageCropWidgetState extends State<ImageCropWidget> {
     );
   }
 
-  List<Widget> _buildCornerHandles(Size displaySize) {
-    const handleSize = 24.0;
+  List<Widget> _buildHandles() {
+    const size = 28.0;
+    final labels = ['TL', 'TR', 'BR', 'BL'];
 
-    Widget buildHandle(Alignment alignment, VoidCallback onDrag) {
-      double left = 0, top = 0;
-
-      if (alignment == Alignment.topLeft) {
-        left = _cropRect.left - handleSize / 2;
-        top = _cropRect.top - handleSize / 2;
-      } else if (alignment == Alignment.topRight) {
-        left = _cropRect.right - handleSize / 2;
-        top = _cropRect.top - handleSize / 2;
-      } else if (alignment == Alignment.bottomLeft) {
-        left = _cropRect.left - handleSize / 2;
-        top = _cropRect.bottom - handleSize / 2;
-      } else if (alignment == Alignment.bottomRight) {
-        left = _cropRect.right - handleSize / 2;
-        top = _cropRect.bottom - handleSize / 2;
-      }
-
+    return List.generate(_corners.length, (i) {
       return Positioned(
-        left: left,
-        top: top,
-        child: GestureDetector(
-          onPanUpdate: (details) {
-            setState(() {
-              _updateCropRect(alignment, details.delta, displaySize);
-            });
-          },
+        left: _corners[i].dx - size / 2,
+        top: _corners[i].dy - size / 2,
+        child: IgnorePointer(
           child: Container(
-            width: handleSize,
-            height: handleSize,
+            width: size,
+            height: size,
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: _activeCorner == i ? Colors.blue : Colors.white,
               shape: BoxShape.circle,
               border: Border.all(color: Colors.blue, width: 2),
+              boxShadow: const [
+                BoxShadow(blurRadius: 4, color: Colors.black26),
+              ],
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              labels[i],
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+                color: _activeCorner == i ? Colors.white : Colors.blue,
+              ),
             ),
           ),
         ),
       );
-    }
-
-    // Center drag handle
-    final centerHandle = Positioned(
-      left: _cropRect.center.dx - 20,
-      top: _cropRect.center.dy - 20,
-      child: GestureDetector(
-        onPanUpdate: (details) {
-          setState(() {
-            final newRect = _cropRect.translate(
-              details.delta.dx,
-              details.delta.dy,
-            );
-            // Keep within bounds
-            if (newRect.left >= 0 &&
-                newRect.top >= 0 &&
-                newRect.right <= displaySize.width &&
-                newRect.bottom <= displaySize.height) {
-              _cropRect = newRect;
-            }
-          });
-        },
-        child: Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.7),
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(Icons.open_with, size: 24),
-        ),
-      ),
-    );
-
-    return [
-      buildHandle(Alignment.topLeft, () {}),
-      buildHandle(Alignment.topRight, () {}),
-      buildHandle(Alignment.bottomLeft, () {}),
-      buildHandle(Alignment.bottomRight, () {}),
-      centerHandle,
-    ];
-  }
-
-  void _updateCropRect(Alignment corner, Offset delta, Size bounds) {
-    const minSize = 50.0;
-    Rect newRect = _cropRect;
-
-    if (corner == Alignment.topLeft) {
-      newRect = Rect.fromLTRB(
-        (_cropRect.left + delta.dx).clamp(0, _cropRect.right - minSize),
-        (_cropRect.top + delta.dy).clamp(0, _cropRect.bottom - minSize),
-        _cropRect.right,
-        _cropRect.bottom,
-      );
-    } else if (corner == Alignment.topRight) {
-      newRect = Rect.fromLTRB(
-        _cropRect.left,
-        (_cropRect.top + delta.dy).clamp(0, _cropRect.bottom - minSize),
-        (_cropRect.right + delta.dx).clamp(
-          _cropRect.left + minSize,
-          bounds.width,
-        ),
-        _cropRect.bottom,
-      );
-    } else if (corner == Alignment.bottomLeft) {
-      newRect = Rect.fromLTRB(
-        (_cropRect.left + delta.dx).clamp(0, _cropRect.right - minSize),
-        _cropRect.top,
-        _cropRect.right,
-        (_cropRect.bottom + delta.dy).clamp(
-          _cropRect.top + minSize,
-          bounds.height,
-        ),
-      );
-    } else if (corner == Alignment.bottomRight) {
-      newRect = Rect.fromLTRB(
-        _cropRect.left,
-        _cropRect.top,
-        (_cropRect.right + delta.dx).clamp(
-          _cropRect.left + minSize,
-          bounds.width,
-        ),
-        (_cropRect.bottom + delta.dy).clamp(
-          _cropRect.top + minSize,
-          bounds.height,
-        ),
-      );
-    }
-
-    _cropRect = newRect;
+    });
   }
 }
 
-class _CropOverlayPainter extends CustomPainter {
-  final Rect cropRect;
+// ─────────────── Overlay painter ───────────────
 
-  _CropOverlayPainter(this.cropRect);
+class _PolygonOverlayPainter extends CustomPainter {
+  final List<Offset> corners;
+
+  _PolygonOverlayPainter(this.corners);
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.black.withValues(alpha: 0.5)
-      ..style = PaintingStyle.fill;
+    if (corners.length != 4) return;
 
-    // Draw darkened areas around crop rectangle
-    // Top
-    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, cropRect.top), paint);
-    // Bottom
-    canvas.drawRect(
-      Rect.fromLTWH(
-        0,
-        cropRect.bottom,
-        size.width,
-        size.height - cropRect.bottom,
-      ),
-      paint,
+    final polyPath = Path()
+      ..moveTo(corners[0].dx, corners[0].dy)
+      ..lineTo(corners[1].dx, corners[1].dy)
+      ..lineTo(corners[2].dx, corners[2].dy)
+      ..lineTo(corners[3].dx, corners[3].dy)
+      ..close();
+
+    // Darken everything outside the selected polygon
+    final fullPath = Path()..addRect(Offset.zero & size);
+    final darkPath = Path.combine(PathOperation.difference, fullPath, polyPath);
+    canvas.drawPath(
+      darkPath,
+      Paint()..color = Colors.black.withValues(alpha: 0.5),
     );
-    // Left
-    canvas.drawRect(
-      Rect.fromLTWH(0, cropRect.top, cropRect.left, cropRect.height),
-      paint,
+
+    // Polygon border
+    canvas.drawPath(
+      polyPath,
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
     );
-    // Right
-    canvas.drawRect(
-      Rect.fromLTWH(
-        cropRect.right,
-        cropRect.top,
-        size.width - cropRect.right,
-        cropRect.height,
-      ),
-      paint,
-    );
+
+    // Rule-of-thirds guide lines inside the quad
+    final guidePaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.3)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+
+    for (int t = 1; t <= 2; t++) {
+      final f = t / 3.0;
+      // Horizontal
+      final left = Offset.lerp(corners[0], corners[3], f)!;
+      final right = Offset.lerp(corners[1], corners[2], f)!;
+      canvas.drawLine(left, right, guidePaint);
+      // Vertical
+      final top = Offset.lerp(corners[0], corners[1], f)!;
+      final bottom = Offset.lerp(corners[3], corners[2], f)!;
+      canvas.drawLine(top, bottom, guidePaint);
+    }
   }
 
   @override
-  bool shouldRepaint(covariant _CropOverlayPainter oldDelegate) {
-    return oldDelegate.cropRect != cropRect;
-  }
+  bool shouldRepaint(covariant _PolygonOverlayPainter oldDelegate) => true;
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:zhapp/mandarin_annotator/annotator_main.dart';
 
 import 'pages/camera-page.dart';
 import 'pages/repository_page.dart';

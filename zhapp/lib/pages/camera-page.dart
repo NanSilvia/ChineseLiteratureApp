@@ -3,6 +3,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'dart:io';
 import '../services/api_service.dart';
+import '../services/card_notifier.dart';
 import '../services/connectivity_service.dart';
 import '../widgets/image_crop_widget.dart';
 
@@ -163,6 +164,7 @@ class _CameraPageState extends State<CameraPage> with ConnectivityAware {
           _originalImagePath = null;
           _textController.clear();
         });
+        CardNotifier().notifyCardsChanged();
         widget.onCardSaved?.call();
       } else if (result.isOffline) {
         _showMessage('You must be online to save a new card.');

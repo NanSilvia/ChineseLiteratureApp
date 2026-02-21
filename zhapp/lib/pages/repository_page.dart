@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/card_model.dart';
 import '../models/folder_model.dart';
 import '../services/api_service.dart';
+import '../services/card_notifier.dart';
 import '../services/connectivity_service.dart';
 import 'card_detail_page.dart';
 
@@ -28,6 +29,17 @@ class _RepositoryPageState extends State<RepositoryPage>
   @override
   void initState() {
     super.initState();
+    CardNotifier().addListener(_onCardsChanged);
+    _loadData();
+  }
+
+  @override
+  void dispose() {
+    CardNotifier().removeListener(_onCardsChanged);
+    super.dispose();
+  }
+
+  void _onCardsChanged() {
     _loadData();
   }
 

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/card_model.dart';
 import '../services/api_service.dart';
+import '../services/card_notifier.dart';
 import '../services/connectivity_service.dart';
+import '../widgets/annotated_chinese_text.dart';
 
 /// Card Detail View (Inside Screen 1)
 /// Shows full card content and analysis section (online-only)
@@ -22,6 +25,11 @@ class _CardDetailPageState extends State<CardDetailPage>
   bool _isLoading = true;
   String? _error;
 
+  // Edit state
+  bool _isEditing = false;
+  final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _textController = TextEditingController();
+
   // Analysis state
   bool _isAnalyzing = false;
   Map<String, dynamic>? _analysis;
@@ -31,6 +39,73 @@ class _CardDetailPageState extends State<CardDetailPage>
   void initState() {
     super.initState();
     _loadCard();
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _textController.dispose();
+    super.dispose();
+  }
+
+  void _startEditing() {
+    setState(() {
+      _isEditing = true;
+      _titleController.text = _card?.title ?? '';
+      _textController.text = _card?.textZh ?? '';
+    });
+  }
+
+  void _cancelEditing() {
+    setState(() => _isEditing = false);
+  }
+
+  Future<void> _saveEdit() async {
+    if (_card == null) return;
+
+    final newText = _textController.text.trim();
+    if (newText.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Chinese text cannot be empty.')),
+      );
+      return;
+    }
+
+    if (isOffline) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You must be online to edit cards.')),
+      );
+      return;
+    }
+
+    final updated = _card!.copyWith(
+      title: _titleController.text.trim().isEmpty
+          ? null
+          : _titleController.text.trim(),
+      textZh: newText,
+    );
+
+    final result = await _api.updateCard(updated);
+    if (result.isSuccess) {
+      setState(() {
+        _card = result.data;
+        _isEditing = false;
+        _analysis = null; // re-analyse with new text
+      });
+      CardNotifier().notifyCardsChanged();
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Card updated.')));
+      }
+      if (isOnline) _loadAnalysis();
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result.error ?? 'Failed to update card')),
+        );
+      }
+    }
   }
 
   @override
@@ -93,13 +168,32 @@ class _CardDetailPageState extends State<CardDetailPage>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_card?.displayTitle ?? 'Card Detail'),
+        title: Text(
+          _isEditing ? 'Edit Card' : (_card?.displayTitle ?? 'Card Detail'),
+        ),
+        leading: _isEditing
+            ? IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: _cancelEditing,
+              )
+            : null,
         actions: [
-          if (_card != null)
+          if (_card != null && !_isEditing)
+            IconButton(
+              icon: const Icon(Icons.edit),
+              tooltip: 'Edit card',
+              onPressed: _startEditing,
+            ),
+          if (_card != null && _isEditing)
+            IconButton(
+              icon: const Icon(Icons.check),
+              tooltip: 'Save changes',
+              onPressed: _saveEdit,
+            ),
+          if (_card != null && !_isEditing)
             IconButton(
               icon: const Icon(Icons.share),
               onPressed: () {
-                // TODO: Implement share functionality
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Share coming soon')),
                 );
@@ -164,7 +258,16 @@ class _CardDetailPageState extends State<CardDetailPage>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Title section
-            if (_card!.displayTitle != null) ...[
+            if (_isEditing) ...[
+              TextField(
+                controller: _titleController,
+                decoration: const InputDecoration(
+                  labelText: 'Title (optional)',
+                  hintText: 'Give this card a title...',
+                ),
+              ),
+              const SizedBox(height: 16),
+            ] else if (_card!.displayTitle != null) ...[
               Text(
                 _card!.displayTitle!,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
@@ -193,17 +296,46 @@ class _CardDetailPageState extends State<CardDetailPage>
   }
 
   Widget _buildChineseTextSection() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: SelectableText(
-        _card!.textZh,
+    if (_isEditing) {
+      return TextField(
+        controller: _textController,
+        maxLines: null,
+        minLines: 5,
         style: const TextStyle(fontSize: 18, height: 1.8),
+        decoration: InputDecoration(
+          labelText: 'Chinese Text',
+          filled: true,
+          fillColor: Colors.grey.shade100,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onLongPressStart: (details) =>
+          _showTextContextMenu(details.globalPosition, _card!.textZh),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: isOnline
+            ? AnnotatedChineseText(
+                key: ValueKey(_card!.textZh),
+                text: _card!.textZh,
+                style: const TextStyle(
+                  fontSize: 18,
+                  height: 1.8,
+                  color: Colors.black87,
+                ),
+              )
+            : SelectableText(
+                _card!.textZh,
+                style: const TextStyle(fontSize: 18, height: 1.8),
+              ),
       ),
     );
   }
@@ -216,15 +348,14 @@ class _CardDetailPageState extends State<CardDetailPage>
           size: 16,
           color: Colors.grey,
         ),
-        const SizedBox(width: 8),
         Text(
-          'Created ${_formatDateTime(_card!.createdAt)}',
+          'Created ${_formatDateOnly(_card!.createdAt)}',
           style: const TextStyle(color: Colors.grey),
         ),
         if (_card!.updatedAt != null) ...[
           const Text(' • ', style: TextStyle(color: Colors.grey)),
           Text(
-            'Updated ${_formatDateTime(_card!.updatedAt!)}',
+            'Updated ${_formatDateOnly(_card!.updatedAt!)}',
             style: const TextStyle(color: Colors.grey),
           ),
         ],
@@ -395,5 +526,47 @@ class _CardDetailPageState extends State<CardDetailPage>
 
   String _formatDateTime(DateTime date) {
     return '${date.day}/${date.month}/${date.year} at ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _formatDateOnly(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
+  }
+
+  // ──────────── Long-press context menu ────────────
+
+  void _showTextContextMenu(Offset position, String text) async {
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+
+    final result = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(
+        Rect.fromLTWH(position.dx, position.dy, 0, 0),
+        Offset.zero & overlay.size,
+      ),
+      items: [
+        const PopupMenuItem(
+          value: 'copy',
+          child: Row(
+            children: [
+              Icon(Icons.copy, size: 18),
+              SizedBox(width: 8),
+              Text('Copy text'),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    if (result == 'copy') {
+      await Clipboard.setData(ClipboardData(text: text));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Copied to clipboard'),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+    }
   }
 }
