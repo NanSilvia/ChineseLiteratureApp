@@ -1,81 +1,139 @@
 import 'package:flutter/material.dart';
 
 import 'pages/camera-page.dart';
-import 'pages/db_page.dart';
-import 'pages/user-page.dart';
-import 'services/db_service.dart';
+import 'pages/repository_page.dart';
+import 'pages/settings_page.dart';
+import 'services/connectivity_service.dart';
+import 'services/auth_service.dart';
 
-void main() => runApp(const MyApp());
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Initialize services
+  ConnectivityService();
+  AuthService().init();
+  runApp(const MyApp());
+}
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      home: HomePage(),
+    return MaterialApp(
+      title: 'Chinese Learning',
       debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.blue,
+          brightness: Brightness.light,
+        ),
+        cardTheme: CardThemeData(
+          elevation: 2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          filled: true,
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+      ),
+      home: const HomePage(),
     );
   }
 }
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
+
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
-  int _index = 1; // middle page is main
-  List<String> _texts = [];
-  final DbService _dbService = DbService();
+  int _currentIndex = 0;
 
-  @override
-  void initState() {
-    super.initState();
-    _loadTexts();
+  // Key to refresh repository page when card is saved
+  final GlobalKey<State<RepositoryPage>> _repositoryKey = GlobalKey();
+
+  void _onCardSaved() {
+    // Switch to repository tab and refresh
+    setState(() => _currentIndex = 0);
   }
 
-  Future<void> _loadTexts() async {
-    final texts = await _dbService.loadTexts();
-    setState(() {
-      _texts = texts;
-    });
-  }
-
-  Future<void> _onTextExtracted(String text) async {
-    await _dbService.saveText(text);
-    await _loadTexts();
-  }
-
-  Future<void> _onDeleteText(int index) async {
-    await _dbService.deleteText(index, _texts);
-    await _loadTexts();
+  void _goToSettings() {
+    setState(() => _currentIndex = 2);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Library')),
+      appBar: AppBar(title: Text(_getTitle()), elevation: 0),
       body: IndexedStack(
-        index: _index,
+        index: _currentIndex,
         children: [
-          CameraPage(onTextExtracted: _onTextExtracted), // page 0
-          DbPage(texts: _texts, onDelete: _onDeleteText), // page 1
-          const UserPage(), // page 2
+          AuthGate(
+            message: 'Please log in to view your saved cards.',
+            onGoToSettings: _goToSettings,
+            child: RepositoryPage(key: _repositoryKey),
+          ),
+          AuthGate(
+            message: 'Please log in to use the OCR camera.',
+            onGoToSettings: _goToSettings,
+            child: CameraPage(onCardSaved: _onCardSaved),
+          ),
+          const SettingsPage(),
         ],
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _index,
-        onTap: (i) => setState(() => _index = i),
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.camera_alt),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (index) => setState(() => _currentIndex = index),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.library_books_outlined),
+            selectedIcon: Icon(Icons.library_books),
+            label: 'Repository',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.camera_alt_outlined),
+            selectedIcon: Icon(Icons.camera_alt),
             label: 'Camera',
           ),
-          BottomNavigationBarItem(icon: Icon(Icons.list), label: 'Saved'),
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Welcome'),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: 'Settings',
+          ),
         ],
       ),
     );
+  }
+
+  String _getTitle() {
+    switch (_currentIndex) {
+      case 0:
+        return 'Library';
+      case 1:
+        return 'OCR Camera';
+      case 2:
+        return 'Settings';
+      default:
+        return 'Chinese Learning';
+    }
   }
 }
