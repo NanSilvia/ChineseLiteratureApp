@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'dart:convert';
 import '../models/card_model.dart';
 import '../models/folder_model.dart';
 import '../models/user_model.dart';
@@ -24,7 +25,7 @@ class DbService {
     final path = join(dbPath, 'zhapp.db');
     return openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _createTables,
       onUpgrade: _onUpgrade,
     );
@@ -71,6 +72,16 @@ class DbService {
         value TEXT
       )
     ''');
+
+    // Annotation cache — persists MandarinSpot & other API results across sessions
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS annotation_cache(
+        cache_key TEXT PRIMARY KEY,
+        namespace TEXT NOT NULL,
+        data TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )
+    ''');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -104,6 +115,18 @@ class DbService {
       } catch (e) {
         // Column might already exist
       }
+    }
+
+    if (oldVersion < 4) {
+      // Add annotation_cache table
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS annotation_cache(
+          cache_key TEXT PRIMARY KEY,
+          namespace TEXT NOT NULL,
+          data TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        )
+      ''');
     }
   }
 
@@ -266,6 +289,57 @@ class DbService {
     for (var folder in folders) {
       await database.insert('folders', {'id': folder.id, 'name': folder.name});
     }
+  }
+
+  // ==================== ANNOTATION CACHE ====================
+
+  /// Store a JSON-serializable value in the persistent annotation cache.
+  Future<void> putCache(String key, String namespace, dynamic data) async {
+    final database = await db;
+    await database.insert('annotation_cache', {
+      'cache_key': key,
+      'namespace': namespace,
+      'data': jsonEncode(data),
+      'created_at': DateTime.now().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// Retrieve a cached value by key, or `null` if not found.
+  Future<dynamic> getCache(String key) async {
+    final database = await db;
+    final rows = await database.query(
+      'annotation_cache',
+      where: 'cache_key = ?',
+      whereArgs: [key],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return jsonDecode(rows.first['data'] as String);
+  }
+
+  /// Remove all cached entries for a given namespace (e.g. 'annotate', 'defs').
+  Future<void> clearCacheByNamespace(String namespace) async {
+    final database = await db;
+    await database.delete(
+      'annotation_cache',
+      where: 'namespace = ?',
+      whereArgs: [namespace],
+    );
+  }
+
+  /// Remove all cached entries.
+  Future<void> clearAllCache() async {
+    final database = await db;
+    await database.delete('annotation_cache');
+  }
+
+  /// Count of cached entries (useful for debug / settings page).
+  Future<int> cacheSize() async {
+    final database = await db;
+    final result = await database.rawQuery(
+      'SELECT COUNT(*) as cnt FROM annotation_cache',
+    );
+    return result.first['cnt'] as int;
   }
 
   // ==================== LEGACY OPERATIONS ====================

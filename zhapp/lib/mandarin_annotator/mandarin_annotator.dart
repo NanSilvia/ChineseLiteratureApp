@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:crypto/crypto.dart';
+import '../services/cache_service.dart';
+import '../services/db_service.dart';
 
 /// MandarinSpot Annotator - Dart wrapper for Chinese text annotation
 ///
@@ -23,6 +25,8 @@ class MandarinAnnotator {
 
   final String apiUrl;
   final Map<String, dynamic> dictionary = {};
+  final CacheService _cache = CacheService();
+  final DbService _db = DbService();
 
   MandarinAnnotator({this.apiUrl = "https://api.mandarinspot.com"});
 
@@ -138,20 +142,29 @@ class MandarinAnnotator {
     }
   }
 
-  /// Get definitions for CJK characters
+  /// Get definitions for CJK characters (with client-side cache)
   Future<Map<String, dynamic>> getDefinitions(
     List<String> characters, {
     String phoneticType = 'pinyin',
   }) async {
-    // Send raw characters
+    // Build a deterministic cache key from input
     String charStr = characters.join('');
+    final cacheKey = CacheService.makeKey('defs', charStr, phoneticType);
+
+    // Return from in-memory cache if available
+    final cached = _cache.get<Map<String, dynamic>>(cacheKey);
+    if (cached != null) return cached;
+
+    // Send raw characters
     String hashInput = _encodeUtf8(characters).join(',') + phoneticType;
     String cacheHash = _sha1Hash(hashInput);
 
-    // Try cache first
+    // Try server-side cache first
     try {
       String cacheUrl = '$apiUrl/cache/$cacheHash';
-      return await _httpRequest('GET', cacheUrl, {});
+      final result = await _httpRequest('GET', cacheUrl, {});
+      _cache.put(cacheKey, result, ttl: CacheService.permanentTtl);
+      return result;
     } catch (_) {
       // Cache miss, fetch from API
     }
@@ -159,7 +172,9 @@ class MandarinAnnotator {
     // Fetch from API
     String defUrl = '$apiUrl/getdefs';
     Map<String, String> params = {'str': charStr, 'phs': phoneticType};
-    return await _httpRequest('POST', defUrl, params);
+    final result = await _httpRequest('POST', defUrl, params);
+    _cache.put(cacheKey, result, ttl: CacheService.permanentTtl);
+    return result;
   }
 
   /// Format character-level annotations
@@ -365,7 +380,7 @@ class MandarinAnnotator {
     }
   }
 
-  /// Annotate Chinese text
+  /// Annotate Chinese text (with full-result caching)
   ///
   /// Args:
   ///   text: Chinese text to annotate
@@ -379,6 +394,30 @@ class MandarinAnnotator {
     String phoneticType = 'pinyin',
     bool asWords = true,
   }) async {
+    // Check full-annotation cache first (in-memory)
+    final cacheKey = CacheService.makeKey(
+      'annotate',
+      text,
+      phoneticType,
+      asWords.toString(),
+    );
+    final cached = _cache.get<List<Map<String, dynamic>>>(cacheKey);
+    if (cached != null) return cached;
+
+    // Check persistent SQLite cache (survives app restart)
+    try {
+      final persisted = await _db.getCache(cacheKey);
+      if (persisted != null) {
+        final restored = (persisted as List)
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList();
+        _cache.put(cacheKey, restored, ttl: CacheService.permanentTtl);
+        return restored;
+      }
+    } catch (_) {
+      // SQLite miss or decode error — continue to API
+    }
+
     List<Map<String, dynamic>> segments = findCjkSegments(text);
 
     // Process each CJK segment independently so the API never creates
@@ -405,6 +444,18 @@ class MandarinAnnotator {
     if (futures.isEmpty) return [];
 
     List<List<Map<String, dynamic>>> results = await Future.wait(futures);
-    return results.expand((list) => list).toList();
+    final annotations = results.expand((list) => list).toList();
+
+    // Store in cache — annotations are deterministic, so use permanent TTL
+    _cache.put(cacheKey, annotations, ttl: CacheService.permanentTtl);
+
+    // Also persist to SQLite for cross-session caching
+    try {
+      await _db.putCache(cacheKey, 'annotate', annotations);
+    } catch (_) {
+      // Non-critical — in-memory cache is still populated
+    }
+
+    return annotations;
   }
 }

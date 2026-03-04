@@ -4,6 +4,7 @@ import '../models/folder_model.dart';
 import '../models/user_model.dart';
 import 'db_service.dart';
 import 'connectivity_service.dart';
+import 'cache_service.dart';
 
 /// Result wrapper for API operations
 class ApiResult<T> {
@@ -34,33 +35,67 @@ class ApiService {
 
   final DbService _db = DbService();
   final ConnectivityService _connectivity = ConnectivityService();
+  final CacheService _cache = CacheService();
+
+  // In-memory card/folder caches — invalidated on mutations
+  List<CardModel>? _cachedCards;
+  int? _cachedCardsFolderId;
+  List<FolderModel>? _cachedFolders;
+  final Map<int, CardModel> _cardByIdCache = {};
 
   // Base URL for API (configure when backend is ready)
   // ignore: unused_field
   static const String _baseUrl = 'http://localhost:3000/api';
+
+  /// Invalidate the in-memory cards list cache.
+  /// Called after any card mutation (create, update, delete).
+  void _invalidateCardsCache() {
+    _cachedCards = null;
+    _cachedCardsFolderId = null;
+  }
+
+  /// Invalidate **all** in-memory caches.
+  /// Useful on logout, or when CardNotifier fires from external sources.
+  void invalidateAll() {
+    _invalidateCardsCache();
+    _cachedFolders = null;
+    _cardByIdCache.clear();
+    _cache.removeByPrefix('analysis');
+  }
 
   // ==================== CARDS ====================
 
   /// Fetch all cards from server
   /// Returns cached data if offline
   Future<ApiResult<List<CardModel>>> getCards({int? folderId}) async {
+    // Return in-memory cache if available and same folder filter
+    if (_cachedCards != null && _cachedCardsFolderId == folderId) {
+      return ApiResult.success(_cachedCards!);
+    }
+
     if (_connectivity.isOffline) {
       // Return cached data when offline
       final cached = await _db.loadCards(folderId: folderId);
+      _cachedCards = cached;
+      _cachedCardsFolderId = folderId;
       return ApiResult.success(cached);
     }
 
     try {
       // TODO: Replace with actual API call
-      // final response = await http.get(Uri.parse('$_baseUrl/cards'));
-      // final data = jsonDecode(response.body) as List;
-      // final cards = data.map((e) => CardModel.fromMap(e)).toList();
-
-      // For now, return local data (simulating server response)
       final cards = await _db.loadCards(folderId: folderId);
 
       // Sort by createdAt descending (most recent first)
       cards.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+      // Update in-memory cache
+      _cachedCards = cards;
+      _cachedCardsFolderId = folderId;
+
+      // Also populate the by-ID cache
+      for (final card in cards) {
+        if (card.id != null) _cardByIdCache[card.id!] = card;
+      }
 
       return ApiResult.success(cards);
     } catch (e) {
@@ -68,11 +103,17 @@ class ApiService {
     }
   }
 
-  /// Fetch a single card by ID
+  /// Fetch a single card by ID (with in-memory cache)
   Future<ApiResult<CardModel>> getCardById(int id) async {
+    // Check in-memory by-ID cache first
+    if (_cardByIdCache.containsKey(id)) {
+      return ApiResult.success(_cardByIdCache[id]!);
+    }
+
     if (_connectivity.isOffline) {
       final cached = await _db.getCardById(id);
       if (cached != null) {
+        _cardByIdCache[id] = cached;
         return ApiResult.success(cached);
       }
       return ApiResult.error('This card is not available offline yet.');
@@ -80,17 +121,12 @@ class ApiService {
 
     try {
       // TODO: Replace with actual API call
-      // final response = await http.get(Uri.parse('$_baseUrl/card/$id'));
-      // final card = CardModel.fromMap(jsonDecode(response.body));
-
       final card = await _db.getCardById(id);
       if (card == null) {
         return ApiResult.error('Card not found');
       }
 
-      // Cache the card locally
-      // await _db.updateCard(card);
-
+      _cardByIdCache[id] = card;
       return ApiResult.success(card);
     } catch (e) {
       return ApiResult.error('Failed to fetch card: $e');
@@ -133,6 +169,9 @@ class ApiService {
       final id = await _db.saveCard(card);
       final savedCard = card.copyWith(id: id);
 
+      // Invalidate cards list cache so next getCards() re-fetches
+      _invalidateCardsCache();
+
       return ApiResult.success(savedCard);
     } catch (e) {
       return ApiResult.error('Failed to create card: $e');
@@ -149,6 +188,11 @@ class ApiService {
       // TODO: Replace with actual API call
       final updated = card.copyWith(updatedAt: DateTime.now());
       await _db.updateCard(updated);
+
+      // Invalidate caches
+      _invalidateCardsCache();
+      if (card.id != null) _cardByIdCache.remove(card.id);
+
       return ApiResult.success(updated);
     } catch (e) {
       return ApiResult.error('Failed to update card: $e');
@@ -164,6 +208,11 @@ class ApiService {
     try {
       // TODO: Replace with actual API call
       await _db.deleteCard(id);
+
+      // Invalidate caches
+      _invalidateCardsCache();
+      _cardByIdCache.remove(id);
+
       return ApiResult.success(true);
     } catch (e) {
       return ApiResult.error('Failed to delete card: $e');
@@ -172,16 +221,22 @@ class ApiService {
 
   // ==================== FOLDERS ====================
 
-  /// Fetch all folders/categories
+  /// Fetch all folders/categories (with in-memory cache)
   Future<ApiResult<List<FolderModel>>> getFolders() async {
+    if (_cachedFolders != null) {
+      return ApiResult.success(_cachedFolders!);
+    }
+
     if (_connectivity.isOffline) {
       final cached = await _db.loadFolders();
+      _cachedFolders = cached;
       return ApiResult.success(cached);
     }
 
     try {
       // TODO: Replace with actual API call
       final folders = await _db.loadFolders();
+      _cachedFolders = folders;
       return ApiResult.success(folders);
     } catch (e) {
       return ApiResult.error('Failed to fetch folders: $e');
@@ -197,6 +252,10 @@ class ApiService {
     try {
       final folder = FolderModel(name: name);
       final id = await _db.saveFolder(folder);
+
+      // Invalidate folders cache
+      _cachedFolders = null;
+
       return ApiResult.success(folder.copyWith(id: id));
     } catch (e) {
       return ApiResult.error('Failed to create folder: $e');
@@ -205,8 +264,12 @@ class ApiService {
 
   // ==================== ANALYSIS (ONLINE ONLY) ====================
 
-  /// Get analysis for a card's Chinese text (ONLINE ONLY)
+  /// Get analysis for a card's Chinese text (ONLINE ONLY, cached)
   Future<ApiResult<Map<String, dynamic>>> analyzeText(String textZh) async {
+    final cacheKey = CacheService.makeKey('analysis', textZh);
+    final cached = _cache.get<ApiResult<Map<String, dynamic>>>(cacheKey);
+    if (cached != null) return cached;
+
     if (_connectivity.isOffline) {
       return ApiResult.offline();
     }
@@ -224,12 +287,15 @@ class ApiService {
         const Duration(seconds: 1),
       ); // Simulate network delay
 
-      return ApiResult.success({
+      final result = ApiResult.success({
         'characters': textZh.length,
         'words': _countChineseWords(textZh),
         'analysis':
             'Analysis placeholder - connect to backend for real analysis',
       });
+
+      _cache.put(cacheKey, result, ttl: CacheService.longTtl);
+      return result;
     } catch (e) {
       return ApiResult.error('Failed to analyze text: $e');
     }

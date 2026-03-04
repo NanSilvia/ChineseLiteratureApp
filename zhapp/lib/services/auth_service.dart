@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../models/user_model.dart';
 import 'db_service.dart';
+import 'cache_service.dart';
+import 'api_service.dart';
 
 /// Service to manage authentication state
 /// Provides a centralized way to check login status and user data
@@ -118,6 +120,13 @@ class AuthService extends ChangeNotifier {
       if (_currentUser?.id != null) {
         await _db.clearUserData(_currentUser!.id!);
       }
+
+      // Clear all in-memory caches
+      CacheService().clear();
+      ApiService().invalidateAll();
+
+      // Clear persistent annotation cache
+      await _db.clearAllCache();
 
       await _db.deleteUser();
       _currentUser = null;
