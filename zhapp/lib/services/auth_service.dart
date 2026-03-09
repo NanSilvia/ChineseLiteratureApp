@@ -25,7 +25,10 @@ class AuthService extends ChangeNotifier {
   bool get isLoading => _isLoading;
   int? get currentUserId => _currentUser?.id;
 
-  /// Initialize auth state on app start
+  final ApiService _api = ApiService();
+
+  /// Initialize auth state on app start.
+  /// Validates the stored token with the server via GET /auth/me.
   Future<void> init() async {
     if (_isInitialized) return;
 
@@ -33,16 +36,17 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _currentUser = await _db.getCurrentUser();
-
-      // If we have a token, verify with server
-      if (_currentUser != null && _currentUser!.isLoggedIn) {
-        // TODO: Call GET /auth/me to verify token
-        // For now, assume token is valid if it exists
+      final result = await _api.getCurrentUser();
+      // Don't overwrite if login() already ran while we were awaiting
+      if (_currentUser == null) {
+        _currentUser = result.data;
       }
     } catch (e) {
-      print('Auth init error: $e');
-      _currentUser = null;
+      debugPrint('Auth init error: $e');
+      // Only clear if nothing else set it
+      if (_currentUser == null) {
+        _currentUser = null;
+      }
     }
 
     _isInitialized = true;
@@ -50,27 +54,26 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Login user
+  /// Login with real backend call.
+  /// Returns null on success, or an error message string on failure.
   Future<String?> login(String username, String password) async {
     _isLoading = true;
     notifyListeners();
 
     try {
-      // TODO: Replace with actual API call
-      // For now, simulate login
-      final user = UserModel(
-        id: 1,
-        username: username,
-        email: '$username@example.com',
-        token: 'mock_token_${DateTime.now().millisecondsSinceEpoch}',
-      );
+      final result = await _api.login(username, password);
 
-      await _db.saveUser(user);
-      _currentUser = user;
+      if (result.isSuccess && result.data != null) {
+        _currentUser = result.data;
+        _isInitialized = true;
+        _isLoading = false;
+        notifyListeners();
+        return null; // success
+      }
 
       _isLoading = false;
       notifyListeners();
-      return null; // Success
+      return result.error ?? 'Login failed';
     } catch (e) {
       _isLoading = false;
       notifyListeners();
@@ -78,7 +81,8 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  /// Register new user
+  /// Register with real backend call.
+  /// Returns null on success, or an error message string on failure.
   Future<String?> register(
     String username,
     String email,
@@ -88,21 +92,19 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // TODO: Replace with actual API call
-      // For now, simulate registration
-      final user = UserModel(
-        id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-        username: username,
-        email: email,
-        token: 'mock_token_${DateTime.now().millisecondsSinceEpoch}',
-      );
+      final result = await _api.register(username, email, password);
 
-      await _db.saveUser(user);
-      _currentUser = user;
+      if (result.isSuccess && result.data != null) {
+        _currentUser = result.data;
+        _isInitialized = true;
+        _isLoading = false;
+        notifyListeners();
+        return null; // success
+      }
 
       _isLoading = false;
       notifyListeners();
-      return null; // Success
+      return result.error ?? 'Registration failed';
     } catch (e) {
       _isLoading = false;
       notifyListeners();
@@ -110,28 +112,27 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  /// Logout current user
+  /// Logout — revoke server tokens, clear local data.
   Future<void> logout() async {
     _isLoading = true;
     notifyListeners();
 
     try {
-      // Clear user-specific cached data
-      if (_currentUser?.id != null) {
-        await _db.clearUserData(_currentUser!.id!);
-      }
+      // Call server logout (revokes refresh tokens) then clear local session
+      await _api.logout();
 
       // Clear all in-memory caches
       CacheService().clear();
-      ApiService().invalidateAll();
+      _api.invalidateAll();
 
-      // Clear persistent annotation cache
-      await _db.clearAllCache();
+      // Clear ALL local data — cards, folders, annotation cache
+      await _db.clearAllLocalData();
 
-      await _db.deleteUser();
       _currentUser = null;
     } catch (e) {
-      print('Logout error: $e');
+      debugPrint('Logout error: $e');
+      // Ensure user is cleared even if server call fails
+      _currentUser = null;
     }
 
     _isLoading = false;

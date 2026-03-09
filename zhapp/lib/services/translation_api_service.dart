@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/translation_models.dart';
 import 'api_service.dart';
+import 'auth_service.dart';
 import 'connectivity_service.dart';
 import 'cache_service.dart';
 
@@ -22,14 +23,30 @@ class TranslationApiService {
   final CacheService _cache = CacheService();
 
   // Base URL for the Translation Analysis API
-  static const String _baseUrl = 'http://10.0.0.2:8000';
+  static const String _baseUrl = 'http://192.168.1.155:8000';
 
   // ─── helpers ───
 
-  Map<String, String> get _headers => {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-  };
+  Map<String, String> get _headers {
+    final token = AuthService().currentUser?.token;
+    return {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+    };
+  }
+
+  /// Check a response for auth / rate-limit errors and return an
+  /// appropriate [ApiResult] if one applies, otherwise `null`.
+  ApiResult<T>? _checkResponse<T>(http.Response res) {
+    if (res.statusCode == 401) {
+      return ApiResult.error('Session expired — please log in again');
+    }
+    if (res.statusCode == 429) {
+      return ApiResult.error('Rate limit exceeded — please wait and retry');
+    }
+    return null;
+  }
 
   /// Poll an async job until it completes or fails.
   Future<ApiResult<AsyncJobStatusResponse>> _pollJob(
@@ -93,10 +110,21 @@ class TranslationApiService {
   Future<ApiResult<TranslationResponse>> translate(
     String text, {
     String schemaName = 'translate',
+    bool forceRefresh = false,
   }) async {
     final cacheKey = CacheService.makeKey('translate', text, schemaName);
-    final cached = _cache.get<ApiResult<TranslationResponse>>(cacheKey);
-    if (cached != null) return cached;
+    if (!forceRefresh) {
+      final cached = _cache.get<ApiResult<TranslationResponse>>(cacheKey);
+      if (cached != null) return cached;
+      final persisted = await _cache.getJson(cacheKey);
+      if (persisted != null) {
+        final result = ApiResult.success(
+          TranslationResponse.fromMap(persisted),
+        );
+        _cache.put(cacheKey, result, ttl: CacheService.longTtl);
+        return result;
+      }
+    }
 
     if (_connectivity.isOffline) return ApiResult.offline();
     try {
@@ -106,10 +134,10 @@ class TranslationApiService {
         body: jsonEncode({'text': text, 'schema_name': schemaName}),
       );
       if (res.statusCode == 200) {
-        final result = ApiResult.success(
-          TranslationResponse.fromMap(jsonDecode(res.body)),
-        );
+        final json = jsonDecode(res.body) as Map<String, dynamic>;
+        final result = ApiResult.success(TranslationResponse.fromMap(json));
         _cache.put(cacheKey, result, ttl: CacheService.longTtl);
+        _cache.putJson(cacheKey, json, ttl: CacheService.longTtl);
         return result;
       }
       return ApiResult.error('Translation failed: ${res.statusCode}');
@@ -179,6 +207,7 @@ class TranslationApiService {
     String language = 'chi',
     String length = 'medium',
     String style = 'neutral',
+    bool forceRefresh = false,
   }) async {
     final cacheKey = CacheService.makeKey(
       'summarize',
@@ -187,8 +216,18 @@ class TranslationApiService {
       length,
       style,
     );
-    final cached = _cache.get<ApiResult<SummarizationResponse>>(cacheKey);
-    if (cached != null) return cached;
+    if (!forceRefresh) {
+      final cached = _cache.get<ApiResult<SummarizationResponse>>(cacheKey);
+      if (cached != null) return cached;
+      final persisted = await _cache.getJson(cacheKey);
+      if (persisted != null) {
+        final result = ApiResult.success(
+          SummarizationResponse.fromMap(persisted),
+        );
+        _cache.put(cacheKey, result, ttl: CacheService.longTtl);
+        return result;
+      }
+    }
 
     if (_connectivity.isOffline) return ApiResult.offline();
     try {
@@ -203,10 +242,10 @@ class TranslationApiService {
         }),
       );
       if (res.statusCode == 200) {
-        final result = ApiResult.success(
-          SummarizationResponse.fromMap(jsonDecode(res.body)),
-        );
+        final json = jsonDecode(res.body) as Map<String, dynamic>;
+        final result = ApiResult.success(SummarizationResponse.fromMap(json));
         _cache.put(cacheKey, result, ttl: CacheService.longTtl);
+        _cache.putJson(cacheKey, json, ttl: CacheService.longTtl);
         return result;
       }
       return ApiResult.error('Summarization failed: ${res.statusCode}');
@@ -222,10 +261,21 @@ class TranslationApiService {
   Future<ApiResult<WordAnalysisResponse>> analyzeWord(
     String word, {
     String language = 'chi',
+    bool forceRefresh = false,
   }) async {
     final cacheKey = CacheService.makeKey('wordAnalysis', word, language);
-    final cached = _cache.get<ApiResult<WordAnalysisResponse>>(cacheKey);
-    if (cached != null) return cached;
+    if (!forceRefresh) {
+      final cached = _cache.get<ApiResult<WordAnalysisResponse>>(cacheKey);
+      if (cached != null) return cached;
+      final persisted = await _cache.getJson(cacheKey);
+      if (persisted != null) {
+        final result = ApiResult.success(
+          WordAnalysisResponse.fromMap(persisted),
+        );
+        _cache.put(cacheKey, result, ttl: CacheService.longTtl);
+        return result;
+      }
+    }
 
     if (_connectivity.isOffline) return ApiResult.offline();
     try {
@@ -241,10 +291,10 @@ class TranslationApiService {
         }),
       );
       if (res.statusCode == 200) {
-        final result = ApiResult.success(
-          WordAnalysisResponse.fromMap(jsonDecode(res.body)),
-        );
+        final json = jsonDecode(res.body) as Map<String, dynamic>;
+        final result = ApiResult.success(WordAnalysisResponse.fromMap(json));
         _cache.put(cacheKey, result, ttl: CacheService.longTtl);
+        _cache.putJson(cacheKey, json, ttl: CacheService.longTtl);
         return result;
       }
       return ApiResult.error('Word analysis failed: ${res.statusCode}');
@@ -259,11 +309,22 @@ class TranslationApiService {
 
   Future<ApiResult<AsyncJobStatusResponse>> analyzeLinguistic(
     String fullText,
-    String selectedText,
-  ) async {
+    String selectedText, {
+    bool forceRefresh = false,
+  }) async {
     final cacheKey = CacheService.makeKey('linguistic', fullText, selectedText);
-    final cached = _cache.get<ApiResult<AsyncJobStatusResponse>>(cacheKey);
-    if (cached != null) return cached;
+    if (!forceRefresh) {
+      final cached = _cache.get<ApiResult<AsyncJobStatusResponse>>(cacheKey);
+      if (cached != null) return cached;
+      final persisted = await _cache.getJson(cacheKey);
+      if (persisted != null) {
+        final result = ApiResult.success(
+          AsyncJobStatusResponse.fromMap(persisted),
+        );
+        _cache.put(cacheKey, result, ttl: CacheService.longTtl);
+        return result;
+      }
+    }
 
     if (_connectivity.isOffline) return ApiResult.offline();
     try {
@@ -278,8 +339,13 @@ class TranslationApiService {
       if (res.statusCode == 200) {
         final job = AsyncJobResponse.fromMap(jsonDecode(res.body));
         final result = await _pollJob('/linguistic/status', job.jobId);
-        if (result.isSuccess) {
+        if (result.isSuccess && result.data != null) {
           _cache.put(cacheKey, result, ttl: CacheService.longTtl);
+          _cache.putJson(
+            cacheKey,
+            result.data!.toMap(),
+            ttl: CacheService.longTtl,
+          );
         }
         return result;
       }
@@ -296,10 +362,21 @@ class TranslationApiService {
   Future<ApiResult<AsyncJobStatusResponse>> generateQuestions(
     String text, {
     int questionCount = 5,
+    bool forceRefresh = false,
   }) async {
     final cacheKey = CacheService.makeKey('questions', text, '$questionCount');
-    final cached = _cache.get<ApiResult<AsyncJobStatusResponse>>(cacheKey);
-    if (cached != null) return cached;
+    if (!forceRefresh) {
+      final cached = _cache.get<ApiResult<AsyncJobStatusResponse>>(cacheKey);
+      if (cached != null) return cached;
+      final persisted = await _cache.getJson(cacheKey);
+      if (persisted != null) {
+        final result = ApiResult.success(
+          AsyncJobStatusResponse.fromMap(persisted),
+        );
+        _cache.put(cacheKey, result, ttl: CacheService.defaultTtl);
+        return result;
+      }
+    }
 
     if (_connectivity.isOffline) return ApiResult.offline();
     try {
@@ -311,8 +388,13 @@ class TranslationApiService {
       if (res.statusCode == 200) {
         final job = AsyncJobResponse.fromMap(jsonDecode(res.body));
         final result = await _pollJob('/questions/status', job.jobId);
-        if (result.isSuccess) {
+        if (result.isSuccess && result.data != null) {
           _cache.put(cacheKey, result, ttl: CacheService.defaultTtl);
+          _cache.putJson(
+            cacheKey,
+            result.data!.toMap(),
+            ttl: CacheService.defaultTtl,
+          );
         }
         return result;
       }
@@ -332,6 +414,7 @@ class TranslationApiService {
     String? author,
     String? subject,
     String? language,
+    bool forceRefresh = false,
   }) async {
     final cacheKey = CacheService.makeKey(
       'bookSearch',
@@ -340,8 +423,16 @@ class TranslationApiService {
       author ?? '',
       '${subject ?? ''}|${language ?? ''}',
     );
-    final cached = _cache.get<ApiResult<BookSearchResponse>>(cacheKey);
-    if (cached != null) return cached;
+    if (!forceRefresh) {
+      final cached = _cache.get<ApiResult<BookSearchResponse>>(cacheKey);
+      if (cached != null) return cached;
+      final persisted = await _cache.getJson(cacheKey);
+      if (persisted != null) {
+        final result = ApiResult.success(BookSearchResponse.fromMap(persisted));
+        _cache.put(cacheKey, result, ttl: CacheService.shortTtl);
+        return result;
+      }
+    }
 
     if (_connectivity.isOffline) return ApiResult.offline();
     try {
@@ -357,10 +448,10 @@ class TranslationApiService {
         }),
       );
       if (res.statusCode == 200) {
-        final result = ApiResult.success(
-          BookSearchResponse.fromMap(jsonDecode(res.body)),
-        );
+        final json = jsonDecode(res.body) as Map<String, dynamic>;
+        final result = ApiResult.success(BookSearchResponse.fromMap(json));
         _cache.put(cacheKey, result, ttl: CacheService.shortTtl);
+        _cache.putJson(cacheKey, json, ttl: CacheService.shortTtl);
         return result;
       }
       return ApiResult.error('Book search failed: ${res.statusCode}');
@@ -376,10 +467,23 @@ class TranslationApiService {
   Future<ApiResult<BookRecommendationResponse>> recommendBooks(
     String text, {
     int limit = 5,
+    bool forceRefresh = false,
   }) async {
     final cacheKey = CacheService.makeKey('bookRecommend', text, '$limit');
-    final cached = _cache.get<ApiResult<BookRecommendationResponse>>(cacheKey);
-    if (cached != null) return cached;
+    if (!forceRefresh) {
+      final cached = _cache.get<ApiResult<BookRecommendationResponse>>(
+        cacheKey,
+      );
+      if (cached != null) return cached;
+      final persisted = await _cache.getJson(cacheKey);
+      if (persisted != null) {
+        final result = ApiResult.success(
+          BookRecommendationResponse.fromMap(persisted),
+        );
+        _cache.put(cacheKey, result, ttl: CacheService.defaultTtl);
+        return result;
+      }
+    }
 
     if (_connectivity.isOffline) return ApiResult.offline();
     try {
@@ -389,10 +493,12 @@ class TranslationApiService {
         body: jsonEncode({'text': text, 'limit': limit}),
       );
       if (res.statusCode == 200) {
+        final json = jsonDecode(res.body) as Map<String, dynamic>;
         final result = ApiResult.success(
-          BookRecommendationResponse.fromMap(jsonDecode(res.body)),
+          BookRecommendationResponse.fromMap(json),
         );
         _cache.put(cacheKey, result, ttl: CacheService.defaultTtl);
+        _cache.putJson(cacheKey, json, ttl: CacheService.defaultTtl);
         return result;
       }
       return ApiResult.error('Book recommend failed: ${res.statusCode}');
@@ -409,6 +515,7 @@ class TranslationApiService {
     String text, {
     String language = 'chi',
     int limit = 5,
+    bool forceRefresh = false,
   }) async {
     final cacheKey = CacheService.makeKey(
       'difficulty',
@@ -416,8 +523,18 @@ class TranslationApiService {
       language,
       '$limit',
     );
-    final cached = _cache.get<ApiResult<TextDifficultyResponse>>(cacheKey);
-    if (cached != null) return cached;
+    if (!forceRefresh) {
+      final cached = _cache.get<ApiResult<TextDifficultyResponse>>(cacheKey);
+      if (cached != null) return cached;
+      final persisted = await _cache.getJson(cacheKey);
+      if (persisted != null) {
+        final result = ApiResult.success(
+          TextDifficultyResponse.fromMap(persisted),
+        );
+        _cache.put(cacheKey, result, ttl: CacheService.defaultTtl);
+        return result;
+      }
+    }
 
     if (_connectivity.isOffline) return ApiResult.offline();
     try {
@@ -431,10 +548,10 @@ class TranslationApiService {
         }),
       );
       if (res.statusCode == 200) {
-        final result = ApiResult.success(
-          TextDifficultyResponse.fromMap(jsonDecode(res.body)),
-        );
+        final json = jsonDecode(res.body) as Map<String, dynamic>;
+        final result = ApiResult.success(TextDifficultyResponse.fromMap(json));
         _cache.put(cacheKey, result, ttl: CacheService.defaultTtl);
+        _cache.putJson(cacheKey, json, ttl: CacheService.defaultTtl);
         return result;
       }
       return ApiResult.error('Similar difficulty failed: ${res.statusCode}');
@@ -451,6 +568,7 @@ class TranslationApiService {
     String text, {
     int limit = 5,
     String? language,
+    bool forceRefresh = false,
   }) async {
     final cacheKey = CacheService.makeKey(
       'research',
@@ -458,8 +576,18 @@ class TranslationApiService {
       '$limit',
       language ?? '',
     );
-    final cached = _cache.get<ApiResult<TextResearchResponse>>(cacheKey);
-    if (cached != null) return cached;
+    if (!forceRefresh) {
+      final cached = _cache.get<ApiResult<TextResearchResponse>>(cacheKey);
+      if (cached != null) return cached;
+      final persisted = await _cache.getJson(cacheKey);
+      if (persisted != null) {
+        final result = ApiResult.success(
+          TextResearchResponse.fromMap(persisted),
+        );
+        _cache.put(cacheKey, result, ttl: CacheService.defaultTtl);
+        return result;
+      }
+    }
 
     if (_connectivity.isOffline) return ApiResult.offline();
     try {
@@ -473,10 +601,10 @@ class TranslationApiService {
         }),
       );
       if (res.statusCode == 200) {
-        final result = ApiResult.success(
-          TextResearchResponse.fromMap(jsonDecode(res.body)),
-        );
+        final json = jsonDecode(res.body) as Map<String, dynamic>;
+        final result = ApiResult.success(TextResearchResponse.fromMap(json));
         _cache.put(cacheKey, result, ttl: CacheService.defaultTtl);
+        _cache.putJson(cacheKey, json, ttl: CacheService.defaultTtl);
         return result;
       }
       return ApiResult.error('Research failed: ${res.statusCode}');
@@ -492,10 +620,19 @@ class TranslationApiService {
   Future<ApiResult<Map<String, dynamic>>> getBooksBySubject(
     String subject, {
     int limit = 10,
+    bool forceRefresh = false,
   }) async {
     final cacheKey = CacheService.makeKey('booksBySubject', subject, '$limit');
-    final cached = _cache.get<ApiResult<Map<String, dynamic>>>(cacheKey);
-    if (cached != null) return cached;
+    if (!forceRefresh) {
+      final cached = _cache.get<ApiResult<Map<String, dynamic>>>(cacheKey);
+      if (cached != null) return cached;
+      final persisted = await _cache.getJson(cacheKey);
+      if (persisted != null) {
+        final result = ApiResult.success(persisted);
+        _cache.put(cacheKey, result, ttl: CacheService.shortTtl);
+        return result;
+      }
+    }
 
     if (_connectivity.isOffline) return ApiResult.offline();
     try {
@@ -504,10 +641,10 @@ class TranslationApiService {
       ).replace(queryParameters: {'limit': '$limit'});
       final res = await http.get(uri, headers: _headers);
       if (res.statusCode == 200) {
-        final result = ApiResult.success(
-          jsonDecode(res.body) as Map<String, dynamic>,
-        );
+        final json = jsonDecode(res.body) as Map<String, dynamic>;
+        final result = ApiResult.success(json);
         _cache.put(cacheKey, result, ttl: CacheService.shortTtl);
+        _cache.putJson(cacheKey, json, ttl: CacheService.shortTtl);
         return result;
       }
       return ApiResult.error('Books by subject failed: ${res.statusCode}');
@@ -523,10 +660,19 @@ class TranslationApiService {
   Future<ApiResult<Map<String, dynamic>>> getBooksByAuthor(
     String author, {
     int limit = 10,
+    bool forceRefresh = false,
   }) async {
     final cacheKey = CacheService.makeKey('booksByAuthor', author, '$limit');
-    final cached = _cache.get<ApiResult<Map<String, dynamic>>>(cacheKey);
-    if (cached != null) return cached;
+    if (!forceRefresh) {
+      final cached = _cache.get<ApiResult<Map<String, dynamic>>>(cacheKey);
+      if (cached != null) return cached;
+      final persisted = await _cache.getJson(cacheKey);
+      if (persisted != null) {
+        final result = ApiResult.success(persisted);
+        _cache.put(cacheKey, result, ttl: CacheService.shortTtl);
+        return result;
+      }
+    }
 
     if (_connectivity.isOffline) return ApiResult.offline();
     try {
@@ -535,10 +681,10 @@ class TranslationApiService {
       ).replace(queryParameters: {'limit': '$limit'});
       final res = await http.get(uri, headers: _headers);
       if (res.statusCode == 200) {
-        final result = ApiResult.success(
-          jsonDecode(res.body) as Map<String, dynamic>,
-        );
+        final json = jsonDecode(res.body) as Map<String, dynamic>;
+        final result = ApiResult.success(json);
         _cache.put(cacheKey, result, ttl: CacheService.shortTtl);
+        _cache.putJson(cacheKey, json, ttl: CacheService.shortTtl);
         return result;
       }
       return ApiResult.error('Books by author failed: ${res.statusCode}');
@@ -551,10 +697,21 @@ class TranslationApiService {
   // BOOKS — Work Details
   //
 
-  Future<ApiResult<Map<String, dynamic>>> getWorkDetails(String workId) async {
+  Future<ApiResult<Map<String, dynamic>>> getWorkDetails(
+    String workId, {
+    bool forceRefresh = false,
+  }) async {
     final cacheKey = CacheService.makeKey('workDetails', workId);
-    final cached = _cache.get<ApiResult<Map<String, dynamic>>>(cacheKey);
-    if (cached != null) return cached;
+    if (!forceRefresh) {
+      final cached = _cache.get<ApiResult<Map<String, dynamic>>>(cacheKey);
+      if (cached != null) return cached;
+      final persisted = await _cache.getJson(cacheKey);
+      if (persisted != null) {
+        final result = ApiResult.success(persisted);
+        _cache.put(cacheKey, result, ttl: CacheService.longTtl);
+        return result;
+      }
+    }
 
     if (_connectivity.isOffline) return ApiResult.offline();
     try {
@@ -563,10 +720,10 @@ class TranslationApiService {
         headers: _headers,
       );
       if (res.statusCode == 200) {
-        final result = ApiResult.success(
-          jsonDecode(res.body) as Map<String, dynamic>,
-        );
+        final json = jsonDecode(res.body) as Map<String, dynamic>;
+        final result = ApiResult.success(json);
         _cache.put(cacheKey, result, ttl: CacheService.longTtl);
+        _cache.putJson(cacheKey, json, ttl: CacheService.longTtl);
         return result;
       }
       return ApiResult.error('Work details failed: ${res.statusCode}');
@@ -579,10 +736,21 @@ class TranslationApiService {
   // BOOKS — Author Info
   //
 
-  Future<ApiResult<Map<String, dynamic>>> getAuthorInfo(String authorId) async {
+  Future<ApiResult<Map<String, dynamic>>> getAuthorInfo(
+    String authorId, {
+    bool forceRefresh = false,
+  }) async {
     final cacheKey = CacheService.makeKey('authorInfo', authorId);
-    final cached = _cache.get<ApiResult<Map<String, dynamic>>>(cacheKey);
-    if (cached != null) return cached;
+    if (!forceRefresh) {
+      final cached = _cache.get<ApiResult<Map<String, dynamic>>>(cacheKey);
+      if (cached != null) return cached;
+      final persisted = await _cache.getJson(cacheKey);
+      if (persisted != null) {
+        final result = ApiResult.success(persisted);
+        _cache.put(cacheKey, result, ttl: CacheService.longTtl);
+        return result;
+      }
+    }
 
     if (_connectivity.isOffline) return ApiResult.offline();
     try {
@@ -593,10 +761,10 @@ class TranslationApiService {
         headers: _headers,
       );
       if (res.statusCode == 200) {
-        final result = ApiResult.success(
-          jsonDecode(res.body) as Map<String, dynamic>,
-        );
+        final json = jsonDecode(res.body) as Map<String, dynamic>;
+        final result = ApiResult.success(json);
         _cache.put(cacheKey, result, ttl: CacheService.longTtl);
+        _cache.putJson(cacheKey, json, ttl: CacheService.longTtl);
         return result;
       }
       return ApiResult.error('Author info failed: ${res.statusCode}');

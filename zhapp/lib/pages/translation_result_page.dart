@@ -32,13 +32,17 @@ class _TranslationResultPageState extends State<TranslationResultPage>
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool forceRefresh = false}) async {
     setState(() {
       _isLoading = true;
       _error = null;
     });
 
-    final result = await _api.translate(widget.text, schemaName: _schemaName);
+    final result = await _api.translate(
+      widget.text,
+      schemaName: _schemaName,
+      forceRefresh: forceRefresh,
+    );
 
     if (mounted) {
       setState(() {
@@ -60,6 +64,11 @@ class _TranslationResultPageState extends State<TranslationResultPage>
       appBar: AppBar(
         title: const Text('Translation'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh (bypass cache)',
+            onPressed: _isLoading ? null : () => _load(forceRefresh: true),
+          ),
           if (_result != null)
             IconButton(
               icon: const Icon(Icons.copy),

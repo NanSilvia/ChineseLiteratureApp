@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/user_model.dart';
 import '../services/api_service.dart';
+import '../services/auth_service.dart';
 import '../services/connectivity_service.dart';
 
 /// Screen 3: Settings (Account / Auth)
@@ -58,8 +59,8 @@ class _SettingsPageState extends State<SettingsPage> with ConnectivityAware {
         user: _user!,
         isOnline: isOnline,
         onLogout: () async {
-          await _api.logout();
-          setState(() => _user = null);
+          await AuthService().logout();
+          if (mounted) setState(() => _user = null);
         },
       );
     }
@@ -68,24 +69,28 @@ class _SettingsPageState extends State<SettingsPage> with ConnectivityAware {
         ? _RegisterForm(
             isOnline: isOnline,
             onRegister: (username, email, password) async {
-              final result = await _api.register(username, email, password);
-              if (result.isSuccess) {
-                setState(() => _user = result.data);
+              final error = await AuthService().register(
+                username,
+                email,
+                password,
+              );
+              if (error == null) {
+                if (mounted) setState(() => _user = AuthService().currentUser);
                 return null;
               }
-              return result.error ?? 'Registration failed';
+              return error;
             },
             onSwitchToLogin: () => setState(() => _showRegisterForm = false),
           )
         : _LoginForm(
             isOnline: isOnline,
             onLogin: (username, password) async {
-              final result = await _api.login(username, password);
-              if (result.isSuccess) {
-                setState(() => _user = result.data);
+              final result = await AuthService().login(username, password);
+              if (result == null) {
+                if (mounted) setState(() => _user = AuthService().currentUser);
                 return null;
               }
-              return result.error ?? 'Login failed';
+              return result;
             },
             onSwitchToRegister: () => setState(() => _showRegisterForm = true),
           );

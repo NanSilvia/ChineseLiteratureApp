@@ -34,7 +34,7 @@ class _SummarizationPageState extends State<SummarizationPage>
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool forceRefresh = false}) async {
     setState(() {
       _isLoading = true;
       _error = null;
@@ -44,6 +44,7 @@ class _SummarizationPageState extends State<SummarizationPage>
       widget.text,
       length: _length,
       style: _style,
+      forceRefresh: forceRefresh,
     );
 
     if (mounted) {
@@ -61,7 +62,16 @@ class _SummarizationPageState extends State<SummarizationPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Summarization')),
+      appBar: AppBar(
+        title: const Text('Summarization'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh (bypass cache)',
+            onPressed: _isLoading ? null : () => _load(forceRefresh: true),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           const OfflineBanner(),

@@ -31,7 +31,7 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool forceRefresh = false}) async {
     setState(() {
       _isLoading = true;
       _error = null;
@@ -43,6 +43,7 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
     final result = await _api.generateQuestions(
       widget.text,
       questionCount: _questionCount,
+      forceRefresh: forceRefresh,
     );
 
     if (mounted) {
@@ -70,8 +71,8 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
           if (_result != null)
             IconButton(
               icon: const Icon(Icons.refresh),
-              tooltip: 'Regenerate',
-              onPressed: _load,
+              tooltip: 'Regenerate (bypass cache)',
+              onPressed: () => _load(forceRefresh: true),
             ),
         ],
       ),

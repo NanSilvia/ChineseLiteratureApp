@@ -36,7 +36,7 @@ class _WordAnalysisPageState extends State<WordAnalysisPage>
     super.dispose();
   }
 
-  Future<void> _analyze() async {
+  Future<void> _analyze({bool forceRefresh = false}) async {
     final word = _wordController.text.trim();
     if (word.isEmpty) {
       ScaffoldMessenger.of(
@@ -50,7 +50,7 @@ class _WordAnalysisPageState extends State<WordAnalysisPage>
       _error = null;
     });
 
-    final result = await _api.analyzeWord(word);
+    final result = await _api.analyzeWord(word, forceRefresh: forceRefresh);
 
     if (mounted) {
       setState(() {
@@ -67,7 +67,16 @@ class _WordAnalysisPageState extends State<WordAnalysisPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Word Analysis')),
+      appBar: AppBar(
+        title: const Text('Word Analysis'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh (bypass cache)',
+            onPressed: _isLoading ? null : () => _analyze(forceRefresh: true),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           const OfflineBanner(),

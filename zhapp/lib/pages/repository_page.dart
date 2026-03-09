@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/card_model.dart';
 import '../models/folder_model.dart';
 import '../services/api_service.dart';
+import '../services/auth_service.dart';
 import '../services/card_notifier.dart';
 import '../services/connectivity_service.dart';
 import 'card_detail_page.dart';
@@ -30,17 +31,32 @@ class _RepositoryPageState extends State<RepositoryPage>
   void initState() {
     super.initState();
     CardNotifier().addListener(_onCardsChanged);
+    AuthService().addListener(_onAuthChanged);
     _loadData();
   }
 
   @override
   void dispose() {
     CardNotifier().removeListener(_onCardsChanged);
+    AuthService().removeListener(_onAuthChanged);
     super.dispose();
   }
 
   void _onCardsChanged() {
     _loadData();
+  }
+
+  void _onAuthChanged() {
+    if (AuthService().isLoggedOut) {
+      setState(() {
+        _cards = [];
+        _folders = [];
+        _selectedFolderId = null;
+        _error = null;
+      });
+    } else if (AuthService().isLoggedIn && !AuthService().isLoading) {
+      _loadData();
+    }
   }
 
   @override

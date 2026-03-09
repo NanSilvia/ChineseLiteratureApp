@@ -17,6 +17,7 @@ class BooksPage extends StatefulWidget {
 class _BooksPageState extends State<BooksPage>
     with ConnectivityAware, SingleTickerProviderStateMixin {
   late final TabController _tabController;
+  final ValueNotifier<int> _refreshNotifier = ValueNotifier<int>(0);
 
   @override
   void initState() {
@@ -27,6 +28,7 @@ class _BooksPageState extends State<BooksPage>
   @override
   void dispose() {
     _tabController.dispose();
+    _refreshNotifier.dispose();
     super.dispose();
   }
 
@@ -35,6 +37,13 @@ class _BooksPageState extends State<BooksPage>
     return Scaffold(
       appBar: AppBar(
         title: const Text('Books & Reading'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh (bypass cache)',
+            onPressed: () => _refreshNotifier.value++,
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
@@ -53,10 +62,22 @@ class _BooksPageState extends State<BooksPage>
             child: TabBarView(
               controller: _tabController,
               children: [
-                _BookSearchTab(cardText: widget.cardText),
-                _BookRecommendTab(cardText: widget.cardText),
-                _DifficultyTab(cardText: widget.cardText),
-                _ResearchTab(cardText: widget.cardText),
+                _BookSearchTab(
+                  cardText: widget.cardText,
+                  refreshNotifier: _refreshNotifier,
+                ),
+                _BookRecommendTab(
+                  cardText: widget.cardText,
+                  refreshNotifier: _refreshNotifier,
+                ),
+                _DifficultyTab(
+                  cardText: widget.cardText,
+                  refreshNotifier: _refreshNotifier,
+                ),
+                _ResearchTab(
+                  cardText: widget.cardText,
+                  refreshNotifier: _refreshNotifier,
+                ),
               ],
             ),
           ),
@@ -72,7 +93,8 @@ class _BooksPageState extends State<BooksPage>
 
 class _BookSearchTab extends StatefulWidget {
   final String cardText;
-  const _BookSearchTab({required this.cardText});
+  final ValueNotifier<int> refreshNotifier;
+  const _BookSearchTab({required this.cardText, required this.refreshNotifier});
 
   @override
   State<_BookSearchTab> createState() => _BookSearchTabState();
@@ -91,12 +113,25 @@ class _BookSearchTabState extends State<_BookSearchTab>
   bool get wantKeepAlive => true;
 
   @override
+  void initState() {
+    super.initState();
+    widget.refreshNotifier.addListener(_onRefresh);
+  }
+
+  @override
   void dispose() {
+    widget.refreshNotifier.removeListener(_onRefresh);
     _queryController.dispose();
     super.dispose();
   }
 
-  Future<void> _search() async {
+  void _onRefresh() {
+    if (_queryController.text.trim().isNotEmpty) {
+      _search(forceRefresh: true);
+    }
+  }
+
+  Future<void> _search({bool forceRefresh = false}) async {
     final q = _queryController.text.trim();
     if (q.isEmpty) return;
 
@@ -105,7 +140,7 @@ class _BookSearchTabState extends State<_BookSearchTab>
       _error = null;
     });
 
-    final result = await _api.searchBooks(q);
+    final result = await _api.searchBooks(q, forceRefresh: forceRefresh);
 
     if (mounted) {
       setState(() {
@@ -184,7 +219,11 @@ class _BookSearchTabState extends State<_BookSearchTab>
 
 class _BookRecommendTab extends StatefulWidget {
   final String cardText;
-  const _BookRecommendTab({required this.cardText});
+  final ValueNotifier<int> refreshNotifier;
+  const _BookRecommendTab({
+    required this.cardText,
+    required this.refreshNotifier,
+  });
 
   @override
   State<_BookRecommendTab> createState() => _BookRecommendTabState();
@@ -206,16 +245,28 @@ class _BookRecommendTabState extends State<_BookRecommendTab>
   @override
   void initState() {
     super.initState();
+    widget.refreshNotifier.addListener(_onRefresh);
     _load();
   }
 
-  Future<void> _load() async {
+  @override
+  void dispose() {
+    widget.refreshNotifier.removeListener(_onRefresh);
+    super.dispose();
+  }
+
+  void _onRefresh() => _load(forceRefresh: true);
+
+  Future<void> _load({bool forceRefresh = false}) async {
     setState(() {
       _isLoading = true;
       _error = null;
     });
 
-    final result = await _api.researchText(widget.cardText);
+    final result = await _api.researchText(
+      widget.cardText,
+      forceRefresh: forceRefresh,
+    );
 
     if (mounted) {
       setState(() {
@@ -307,7 +358,8 @@ class _BookRecommendTabState extends State<_BookRecommendTab>
 
 class _DifficultyTab extends StatefulWidget {
   final String cardText;
-  const _DifficultyTab({required this.cardText});
+  final ValueNotifier<int> refreshNotifier;
+  const _DifficultyTab({required this.cardText, required this.refreshNotifier});
 
   @override
   State<_DifficultyTab> createState() => _DifficultyTabState();
@@ -327,16 +379,28 @@ class _DifficultyTabState extends State<_DifficultyTab>
   @override
   void initState() {
     super.initState();
+    widget.refreshNotifier.addListener(_onRefresh);
     _load();
   }
 
-  Future<void> _load() async {
+  @override
+  void dispose() {
+    widget.refreshNotifier.removeListener(_onRefresh);
+    super.dispose();
+  }
+
+  void _onRefresh() => _load(forceRefresh: true);
+
+  Future<void> _load({bool forceRefresh = false}) async {
     setState(() {
       _isLoading = true;
       _error = null;
     });
 
-    final result = await _api.findSimilarDifficulty(widget.cardText);
+    final result = await _api.findSimilarDifficulty(
+      widget.cardText,
+      forceRefresh: forceRefresh,
+    );
 
     if (mounted) {
       setState(() {
@@ -666,7 +730,8 @@ class _SimilarTextBookCard extends StatelessWidget {
 
 class _ResearchTab extends StatefulWidget {
   final String cardText;
-  const _ResearchTab({required this.cardText});
+  final ValueNotifier<int> refreshNotifier;
+  const _ResearchTab({required this.cardText, required this.refreshNotifier});
 
   @override
   State<_ResearchTab> createState() => _ResearchTabState();
@@ -686,16 +751,28 @@ class _ResearchTabState extends State<_ResearchTab>
   @override
   void initState() {
     super.initState();
+    widget.refreshNotifier.addListener(_onRefresh);
     _load();
   }
 
-  Future<void> _load() async {
+  @override
+  void dispose() {
+    widget.refreshNotifier.removeListener(_onRefresh);
+    super.dispose();
+  }
+
+  void _onRefresh() => _load(forceRefresh: true);
+
+  Future<void> _load({bool forceRefresh = false}) async {
     setState(() {
       _isLoading = true;
       _error = null;
     });
 
-    final result = await _api.researchText(widget.cardText);
+    final result = await _api.researchText(
+      widget.cardText,
+      forceRefresh: forceRefresh,
+    );
 
     if (mounted) {
       setState(() {

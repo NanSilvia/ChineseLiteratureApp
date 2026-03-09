@@ -49,7 +49,10 @@ class _CameraPageState extends State<CameraPage> with ConnectivityAware {
       });
 
       final picker = ImagePicker();
-      final XFile? image = await picker.pickImage(source: ImageSource.camera);
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.rear,
+      );
 
       if (image == null) {
         setState(() => _state = CameraPageState.idle);

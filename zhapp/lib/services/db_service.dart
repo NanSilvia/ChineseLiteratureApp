@@ -25,7 +25,7 @@ class DbService {
     final path = join(dbPath, 'zhapp.db');
     return openDatabase(
       path,
-      version: 4,
+      version: 6,
       onCreate: _createTables,
       onUpgrade: _onUpgrade,
     );
@@ -61,7 +61,8 @@ class DbService {
         id INTEGER PRIMARY KEY,
         username TEXT NOT NULL,
         email TEXT,
-        token TEXT
+        token TEXT,
+        refreshToken TEXT
       )
     ''');
 
@@ -79,7 +80,8 @@ class DbService {
         cache_key TEXT PRIMARY KEY,
         namespace TEXT NOT NULL,
         data TEXT NOT NULL,
-        created_at TEXT NOT NULL
+        created_at TEXT NOT NULL,
+        expires_at TEXT
       )
     ''');
   }
@@ -127,6 +129,26 @@ class DbService {
           created_at TEXT NOT NULL
         )
       ''');
+    }
+
+    if (oldVersion < 5) {
+      // Add refreshToken column to user table
+      try {
+        await db.execute('ALTER TABLE user ADD COLUMN refreshToken TEXT');
+      } catch (e) {
+        // Column might already exist
+      }
+    }
+
+    if (oldVersion < 6) {
+      // Add expires_at column to annotation_cache
+      try {
+        await db.execute(
+          'ALTER TABLE annotation_cache ADD COLUMN expires_at TEXT',
+        );
+      } catch (e) {
+        // Column might already exist
+      }
     }
   }
 
@@ -230,7 +252,13 @@ class DbService {
     // Clear existing user data
     await database.delete('user');
     // Insert new user
-    await database.insert('user', user.toMap());
+    await database.insert('user', {
+      'id': user.id,
+      'username': user.username,
+      'email': user.email,
+      'token': user.token,
+      'refreshToken': user.refreshToken,
+    });
   }
 
   Future<UserModel?> getUser() async {
@@ -261,6 +289,16 @@ class DbService {
     final database = await db;
     await database.delete('cards', where: 'userId = ?', whereArgs: [userId]);
     await database.delete('folders', where: 'userId = ?', whereArgs: [userId]);
+  }
+
+  /// Clear ALL local data — user session, cards, folders, and annotation cache.
+  /// Called on logout to ensure no stale data leaks to the next session.
+  Future<void> clearAllLocalData() async {
+    final database = await db;
+    await database.delete('user');
+    await database.delete('cards');
+    await database.delete('folders');
+    await database.delete('annotation_cache');
   }
 
   // ==================== SYNC OPERATIONS ====================
@@ -294,17 +332,23 @@ class DbService {
   // ==================== ANNOTATION CACHE ====================
 
   /// Store a JSON-serializable value in the persistent annotation cache.
-  Future<void> putCache(String key, String namespace, dynamic data) async {
+  Future<void> putCache(
+    String key,
+    String namespace,
+    dynamic data, {
+    DateTime? expiresAt,
+  }) async {
     final database = await db;
     await database.insert('annotation_cache', {
       'cache_key': key,
       'namespace': namespace,
       'data': jsonEncode(data),
       'created_at': DateTime.now().toIso8601String(),
+      'expires_at': expiresAt?.toIso8601String(),
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  /// Retrieve a cached value by key, or `null` if not found.
+  /// Retrieve a cached value by key, or `null` if not found or expired.
   Future<dynamic> getCache(String key) async {
     final database = await db;
     final rows = await database.query(
@@ -314,7 +358,32 @@ class DbService {
       limit: 1,
     );
     if (rows.isEmpty) return null;
-    return jsonDecode(rows.first['data'] as String);
+    final row = rows.first;
+    // Check expiry
+    final expiresAtStr = row['expires_at'] as String?;
+    if (expiresAtStr != null) {
+      final expiresAt = DateTime.tryParse(expiresAtStr);
+      if (expiresAt != null && DateTime.now().isAfter(expiresAt)) {
+        // Expired — delete and return null
+        await database.delete(
+          'annotation_cache',
+          where: 'cache_key = ?',
+          whereArgs: [key],
+        );
+        return null;
+      }
+    }
+    return jsonDecode(row['data'] as String);
+  }
+
+  /// Remove a single cached entry by key.
+  Future<void> clearCacheByKey(String key) async {
+    final database = await db;
+    await database.delete(
+      'annotation_cache',
+      where: 'cache_key = ?',
+      whereArgs: [key],
+    );
   }
 
   /// Remove all cached entries for a given namespace (e.g. 'annotate', 'defs').

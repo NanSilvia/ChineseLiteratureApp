@@ -48,7 +48,7 @@ class _LinguisticAnalysisPageState extends State<LinguisticAnalysisPage>
     super.dispose();
   }
 
-  Future<void> _analyze() async {
+  Future<void> _analyze({bool forceRefresh = false}) async {
     final selected = _selectionController.text.trim();
     if (selected.isEmpty) {
       ScaffoldMessenger.of(
@@ -63,7 +63,11 @@ class _LinguisticAnalysisPageState extends State<LinguisticAnalysisPage>
       _result = null;
     });
 
-    final result = await _api.analyzeLinguistic(widget.fullText, selected);
+    final result = await _api.analyzeLinguistic(
+      widget.fullText,
+      selected,
+      forceRefresh: forceRefresh,
+    );
 
     if (mounted) {
       if (result.isSuccess) {
@@ -136,7 +140,16 @@ class _LinguisticAnalysisPageState extends State<LinguisticAnalysisPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Linguistic Analysis')),
+      appBar: AppBar(
+        title: const Text('Linguistic Analysis'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh (bypass cache)',
+            onPressed: _isLoading ? null : () => _analyze(forceRefresh: true),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           const OfflineBanner(),

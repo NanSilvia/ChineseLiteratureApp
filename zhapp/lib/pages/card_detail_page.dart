@@ -501,8 +501,6 @@ class _CardDetailPageState extends State<CardDetailPage>
               ),
           ],
         ),
-        const SizedBox(height: 12),
-        _buildAnalysisContent(),
         const SizedBox(height: 20),
         _buildAnalysisToolsGrid(),
       ],
@@ -659,123 +657,6 @@ class _CardDetailPageState extends State<CardDetailPage>
 
   void _openPage(Widget page) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => page));
-  }
-
-  Widget _buildAnalysisContent() {
-    if (isOffline && _analysis == null) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade300),
-        ),
-        child: Column(
-          children: [
-            const Icon(Icons.wifi_off, size: 48, color: Colors.grey),
-            const SizedBox(height: 12),
-            const Text(
-              'Analysis requires an internet connection.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: isOnline ? _loadAnalysis : null,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (_isAnalyzing) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: const Column(
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 12),
-            Text('Analyzing text...'),
-          ],
-        ),
-      );
-    }
-
-    if (_analysisError != null && _analysisError != 'offline') {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.red.shade50,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.red.shade200),
-        ),
-        child: Column(
-          children: [
-            Text(_analysisError!, style: TextStyle(color: Colors.red.shade700)),
-            const SizedBox(height: 12),
-            ElevatedButton.icon(
-              onPressed: _loadAnalysis,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (_analysis != null) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.blue.shade50,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.blue.shade200),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildAnalysisRow('Characters', '${_analysis!['characters']}'),
-            const SizedBox(height: 8),
-            _buildAnalysisRow('Words', '${_analysis!['words']}'),
-            const SizedBox(height: 12),
-            Text(
-              _analysis!['analysis'] ?? '',
-              style: const TextStyle(fontSize: 14),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: [
-          const Text('No analysis available'),
-          const SizedBox(height: 12),
-          ElevatedButton.icon(
-            onPressed: isOnline ? _loadAnalysis : null,
-            icon: const Icon(Icons.analytics),
-            label: const Text('Analyze'),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildAnalysisRow(String label, String value) {
