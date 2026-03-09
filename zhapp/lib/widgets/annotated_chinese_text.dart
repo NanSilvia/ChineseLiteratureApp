@@ -129,7 +129,7 @@ class _AnnotatedChineseTextState extends State<AnnotatedChineseText> {
     );
   }
 
-  // ──── Exact rendering logic from annotator_main.dart ────
+  // ---- Exact rendering logic from annotator_main.dart ----
 
   Widget _buildAnnotatedTextWithPunctuation(
     String text,
@@ -180,7 +180,7 @@ class _AnnotatedChineseTextState extends State<AnnotatedChineseText> {
     );
   }
 
-  // ──── Context menu ────
+  // ---- Context menu ----
 
   void _showContextMenu(Offset position, String text) async {
     final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
@@ -219,7 +219,7 @@ class _AnnotatedChineseTextState extends State<AnnotatedChineseText> {
   }
 }
 
-// ──── AnnotatedWordWidget — exact copy from annotator_main.dart ────
+// ---- AnnotatedWordWidget — exact copy from annotator_main.dart ----
 
 class AnnotatedWordWidget extends StatefulWidget {
   final Map<String, dynamic> annotation;

@@ -42,7 +42,7 @@ class CacheService {
   /// which are deterministic for the same input).
   static const Duration permanentTtl = Duration(days: 365);
 
-  // ─── L1 (in-memory) Core API ───
+  // --- L1 (in-memory) Core API ---
 
   /// Store a value in the in-memory cache only.
   void put<T>(String key, T data, {Duration ttl = defaultTtl}) {
@@ -60,7 +60,7 @@ class CacheService {
     return entry.data as T;
   }
 
-  // ─── L2 (SQLite) persistent JSON cache ───
+  // --- L2 (SQLite) persistent JSON cache ---
 
   /// Store raw JSON in both L1 and SQLite.
   /// [namespace] is extracted from the first segment of [key] (before ':').
@@ -131,7 +131,7 @@ class CacheService {
     _cache.removeWhere((_, entry) => entry.isExpired);
   }
 
-  // ─── Statistics ───
+  // --- Statistics ---
 
   Map<String, dynamic> get stats {
     _evictExpired();
@@ -143,7 +143,7 @@ class CacheService {
     return {'totalEntries': _cache.length, 'namespaces': namespaces};
   }
 
-  // ─── Key helpers ───
+  // --- Key helpers ---
 
   static String makeKey(
     String namespace, [

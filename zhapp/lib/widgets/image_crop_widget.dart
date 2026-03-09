@@ -84,7 +84,7 @@ class _ImageCropWidgetState extends State<ImageCropWidget> {
     return closest;
   }
 
-  // ─────────────── Perspective crop ───────────────
+  // --------------- Perspective crop ---------------
 
   Future<void> _performCrop() async {
     if (_uiImage == null) return;
@@ -183,7 +183,7 @@ class _ImageCropWidgetState extends State<ImageCropWidget> {
     }
   }
 
-  // ─────────────── Homography math ───────────────
+  // --------------- Homography math ---------------
 
   /// Compute the 3×3 homography that maps [src] points to [dst] points.
   /// Returns the 8 coefficients [h0..h7] with h8 normalised to 1.
@@ -248,7 +248,7 @@ class _ImageCropWidgetState extends State<ImageCropWidget> {
     return x;
   }
 
-  // ─────────────── Build UI ───────────────
+  // --------------- Build UI ---------------
 
   @override
   Widget build(BuildContext context) {
@@ -395,7 +395,7 @@ class _ImageCropWidgetState extends State<ImageCropWidget> {
   }
 }
 
-// ─────────────── Overlay painter ───────────────
+// --------------- Overlay painter ---------------
 
 class _PolygonOverlayPainter extends CustomPainter {
   final List<Offset> corners;

@@ -1,6 +1,6 @@
 // Models for the Translation Analysis API endpoints (openapi.json)
 
-// ─── Translation ───
+// --- Translation ---
 
 class TranslationRequest {
   final String text;
@@ -61,7 +61,7 @@ class TranslationResponse {
   }
 }
 
-// ─── Summarization ───
+// --- Summarization ---
 
 class SummarizationRequest {
   final String text;
@@ -119,7 +119,7 @@ class SummarizationResponse {
   }
 }
 
-// ─── Word Analysis ───
+// --- Word Analysis ---
 
 class WordAnalysisRequest {
   final String word;
@@ -183,7 +183,7 @@ class WordAnalysisResponse {
   }
 }
 
-// ─── Async Jobs ───
+// --- Async Jobs ---
 
 enum JobStatus { pending, processing, completed, failed }
 
@@ -252,9 +252,18 @@ class AsyncJobStatusResponse {
       completedAt: map['completed_at'] as String?,
     );
   }
+  Map<String, dynamic> toMap() => {
+    'job_id': jobId,
+    'status': status.name,
+    'progress': progress,
+    'result': result,
+    'error': error,
+    'created_at': createdAt,
+    'completed_at': completedAt,
+  };
 }
 
-// ─── Linguistic Analysis ───
+// --- Linguistic Analysis ---
 
 class LinguisticRequest {
   final String fullText;
@@ -268,7 +277,7 @@ class LinguisticRequest {
   };
 }
 
-// ─── Questions Generation ───
+// --- Questions Generation ---
 
 class QuestionsRequest {
   final String text;
@@ -282,7 +291,7 @@ class QuestionsRequest {
   };
 }
 
-// ─── Book Models ───
+// --- Book Models ---
 
 class BookSummary {
   final String title;
@@ -605,7 +614,7 @@ class TextResearchResponse {
   }
 }
 
-// ─── Health Check ───
+// --- Health Check ---
 
 class HealthCheckResponse {
   final String status;

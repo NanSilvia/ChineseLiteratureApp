@@ -25,7 +25,7 @@ class TranslationApiService {
   // Base URL for the Translation Analysis API
   static const String _baseUrl = 'http://192.168.1.155:8000';
 
-  // ─── helpers ───
+  // --- helpers ---
 
   Map<String, String> get _headers {
     final token = AuthService().currentUser?.token;
