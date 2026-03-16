@@ -1,6 +1,36 @@
 // Models for the Translation Analysis API endpoints (openapi.json)
 
-// --- Translation ---
+String _extractXmlTag(String text, String tag) {
+  final match = RegExp('<$tag>(.*?)</$tag>', dotAll: true).firstMatch(text);
+  return match?.group(1)?.trim() ?? '';
+}
+
+String _stripXmlTags(String text) {
+  return text.replaceAll(RegExp(r'<[^>]+>'), '').trim();
+}
+
+dynamic _sanitizeTranslationValue(dynamic value) {
+  if (value is Map) {
+    final map = Map<String, dynamic>.from(value);
+    final translatedText = map['translated_text'];
+    if (translatedText is String && translatedText.contains('<')) {
+      final extracted = _extractXmlTag(translatedText, 'translated_text');
+      map['translated_text'] = extracted.isNotEmpty
+          ? extracted
+          : _stripXmlTags(translatedText);
+    }
+    return map;
+  }
+
+  if (value is String && value.contains('<')) {
+    final extracted = _extractXmlTag(value, 'translated_text');
+    return extracted.isNotEmpty ? extracted : _stripXmlTags(value);
+  }
+
+  return value;
+}
+
+//  Translation
 
 class TranslationRequest {
   final String text;
@@ -43,10 +73,14 @@ class TranslationResponse {
   });
 
   factory TranslationResponse.fromMap(Map<String, dynamic> map) {
+    final rawTranslations = Map<String, dynamic>.from(
+      map['translations'] as Map? ?? {},
+    );
+
     return TranslationResponse(
       inputText: map['input_text'] as String? ?? '',
-      translations: Map<String, dynamic>.from(
-        map['translations'] as Map? ?? {},
+      translations: rawTranslations.map(
+        (key, value) => MapEntry(key, _sanitizeTranslationValue(value)),
       ),
       dictionaryEntries: (map['dictionary_entries'] as List?)
           ?.map((e) => DictionaryEntry.fromMap(e as Map<String, dynamic>))
@@ -57,11 +91,15 @@ class TranslationResponse {
   /// Combined translation text from all models
   String get combinedTranslation {
     if (translations.isEmpty) return '';
-    return translations.values.first.toString();
+    final first = translations.values.first;
+    if (first is Map<String, dynamic>) {
+      return first['translated_text'] as String? ?? '';
+    }
+    return _sanitizeTranslationValue(first)?.toString() ?? '';
   }
 }
 
-// --- Summarization ---
+//  Summarization
 
 class SummarizationRequest {
   final String text;
@@ -119,7 +157,7 @@ class SummarizationResponse {
   }
 }
 
-// --- Word Analysis ---
+//  Word Analysis
 
 class WordAnalysisRequest {
   final String word;
@@ -183,7 +221,7 @@ class WordAnalysisResponse {
   }
 }
 
-// --- Async Jobs ---
+//  Async Jobs
 
 enum JobStatus { pending, processing, completed, failed }
 
@@ -252,6 +290,7 @@ class AsyncJobStatusResponse {
       completedAt: map['completed_at'] as String?,
     );
   }
+
   Map<String, dynamic> toMap() => {
     'job_id': jobId,
     'status': status.name,
@@ -263,7 +302,7 @@ class AsyncJobStatusResponse {
   };
 }
 
-// --- Linguistic Analysis ---
+//  Linguistic Analysis
 
 class LinguisticRequest {
   final String fullText;
@@ -277,7 +316,7 @@ class LinguisticRequest {
   };
 }
 
-// --- Questions Generation ---
+//  Questions Generation
 
 class QuestionsRequest {
   final String text;
@@ -291,7 +330,7 @@ class QuestionsRequest {
   };
 }
 
-// --- Book Models ---
+//  Book Models
 
 class BookSummary {
   final String title;
@@ -614,7 +653,7 @@ class TextResearchResponse {
   }
 }
 
-// --- Health Check ---
+//  Health Check
 
 class HealthCheckResponse {
   final String status;

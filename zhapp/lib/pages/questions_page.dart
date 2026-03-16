@@ -1,7 +1,40 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/translation_models.dart';
 import '../services/translation_api_service.dart';
 import '../services/connectivity_service.dart';
+
+String? _xmlPartial(String buf, String tag) {
+  final open = buf.indexOf('<$tag>');
+  if (open == -1) return null;
+  final start = open + tag.length + 2;
+  final close = buf.indexOf('</$tag>', start);
+  return close == -1 ? buf.substring(start) : buf.substring(start, close);
+}
+
+List<Map<String, dynamic>> _streamingQuestions(String buf) {
+  final questionsBlock = _xmlPartial(buf, 'questions') ?? buf;
+  final matches = RegExp(
+    r'<question>(.*?)</question>',
+    dotAll: true,
+  ).allMatches(questionsBlock);
+
+  return matches.map((match) {
+    final inner = match.group(1) ?? '';
+    final prompt = (_xmlPartial(inner, 'prompt') ?? '').trim();
+    final options = RegExp(
+      r'<option>(.*?)</option>',
+      dotAll: true,
+    ).allMatches(inner).map((m) => (m.group(1) ?? '').trim()).toList();
+    final answerText = (_xmlPartial(inner, 'answer') ?? '0').trim();
+    final answerIndex = int.tryParse(answerText) ?? 0;
+    return {
+      'question_prompt': prompt,
+      'possible_answers': options,
+      'correct_answer_index': answerIndex,
+    };
+  }).toList();
+}
 
 /// Full-screen page that generates comprehension questions from Chinese text.
 class QuestionsPage extends StatefulWidget {
@@ -20,6 +53,9 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
   bool _isLoading = false;
   String? _error;
   int _questionCount = 5;
+  String _streamingText = '';
+  bool _thinkingEnabled = true;
+  StreamSubscription<SseEvent>? _sseSub;
 
   // Track user answers (question index → selected option index)
   final Map<int, int> _answers = {};
@@ -28,38 +64,79 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
   @override
   void initState() {
     super.initState();
+    _thinkingEnabled = _api.thinkingEnabled;
     _load();
   }
 
+  void _toggleThinking() {
+    final next = !_thinkingEnabled;
+    _api.thinkingEnabled = next;
+    setState(() => _thinkingEnabled = next);
+    _load(forceRefresh: true);
+  }
+
+  @override
+  void dispose() {
+    _sseSub?.cancel();
+    super.dispose();
+  }
+
   Future<void> _load({bool forceRefresh = false}) async {
+    _sseSub?.cancel();
     setState(() {
       _isLoading = true;
       _error = null;
       _result = null;
+      _streamingText = '';
       _answers.clear();
       _showAnswers = false;
     });
 
-    final result = await _api.generateQuestions(
-      widget.text,
-      questionCount: _questionCount,
-      forceRefresh: forceRefresh,
-    );
-
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-        if (result.isSuccess) {
-          _result = result.data;
-          if (_result!.status == JobStatus.failed) {
-            _error = _result!.error ?? 'Question generation failed';
-            _result = null;
-          }
-        } else {
-          _error = result.error;
-        }
-      });
-    }
+    _sseSub = _api
+        .questionsStream(
+          widget.text,
+          questionCount: _questionCount,
+          forceRefresh: forceRefresh,
+          enableThinking: _thinkingEnabled,
+        )
+        .listen(
+          (ev) {
+            if (!mounted) return;
+            if (ev.type == 'token') {
+              setState(() => _streamingText += ev.data['t'] as String? ?? '');
+            } else if (ev.type == 'result') {
+              try {
+                final status = AsyncJobStatusResponse.fromMap(ev.data);
+                if (status.status == JobStatus.failed) {
+                  setState(() {
+                    _isLoading = false;
+                    _error = status.error ?? 'Question generation failed';
+                  });
+                } else {
+                  setState(() => _result = status);
+                }
+              } catch (_) {}
+            } else if (ev.type == 'done') {
+              setState(() => _isLoading = false);
+            } else if (ev.type == 'error') {
+              setState(() {
+                _isLoading = false;
+                _error = ev.data['message'] as String? ?? 'Streaming error';
+              });
+            }
+          },
+          onError: (e) {
+            if (mounted) {
+              setState(() {
+                _isLoading = false;
+                _error = e.toString();
+              });
+            }
+          },
+          onDone: () {
+            if (mounted) setState(() => _isLoading = false);
+          },
+        );
   }
 
   @override
@@ -68,6 +145,16 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
       appBar: AppBar(
         title: const Text('Comprehension Questions'),
         actions: [
+          IconButton(
+            icon: Icon(
+              Icons.psychology,
+              color: _thinkingEnabled ? null : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3),
+            ),
+            tooltip: _thinkingEnabled
+                ? 'Thinking enabled — tap to disable'
+                : 'Thinking disabled — tap to enable',
+            onPressed: _toggleThinking,
+          ),
           if (_result != null)
             IconButton(
               icon: const Icon(Icons.refresh),
@@ -122,15 +209,24 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 12),
-            Text('Generating questions…\nThis may take a moment.'),
-          ],
-        ),
+      final questions = _streamingQuestions(_streamingText);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const LinearProgressIndicator(minHeight: 2),
+          if (questions.isNotEmpty)
+            Expanded(child: _buildQuestionsList(questions))
+          else
+            const Expanded(
+              child: Center(
+                child: Text(
+                  'Generating questions\u2026\nThis may take a moment.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+            ),
+        ],
       );
     }
 
@@ -167,19 +263,29 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
 
     // Parse questions — backend returns:
     // {questions_list: [{question_prompt, possible_answers: [str,...], correct_answer_index: int}]}
-    List<dynamic> questions = [];
-    if (data is Map && data['questions_list'] is List) {
-      questions = data['questions_list'] as List;
-    } else if (data is List) {
-      questions = data;
-    } else if (data is Map && data['questions'] is List) {
-      questions = data['questions'] as List;
-    }
+    final questions = _extractQuestions(data);
 
     if (questions.isEmpty) {
       return const Center(child: Text('No questions generated.'));
     }
 
+    return _buildQuestionsList(questions);
+  }
+
+  List<dynamic> _extractQuestions(dynamic data) {
+    if (data is Map && data['questions_list'] is List) {
+      return data['questions_list'] as List;
+    }
+    if (data is List) {
+      return data;
+    }
+    if (data is Map && data['questions'] is List) {
+      return data['questions'] as List;
+    }
+    return [];
+  }
+
+  Widget _buildQuestionsList(List<dynamic> questions) {
     final cs = Theme.of(context).colorScheme;
 
     return ListView.separated(

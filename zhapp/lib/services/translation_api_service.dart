@@ -7,6 +7,14 @@ import 'auth_service.dart';
 import 'connectivity_service.dart';
 import 'cache_service.dart';
 
+/// A single Server-Sent Event received from a streaming endpoint.
+class SseEvent {
+  final String type;
+  final Map<String, dynamic> data;
+
+  const SseEvent({required this.type, required this.data});
+}
+
 /// Service for calling the Translation Analysis API endpoints.
 ///
 /// All methods return [ApiResult] following the project convention.
@@ -21,11 +29,12 @@ class TranslationApiService {
 
   final ConnectivityService _connectivity = ConnectivityService();
   final CacheService _cache = CacheService();
+  bool thinkingEnabled = true;
 
   // Base URL for the Translation Analysis API
   static const String _baseUrl = 'http://192.168.1.155:8000';
 
-  // --- helpers ---
+  //  helpers
 
   Map<String, String> get _headers {
     final token = AuthService().currentUser?.token;
@@ -111,8 +120,15 @@ class TranslationApiService {
     String text, {
     String schemaName = 'translate',
     bool forceRefresh = false,
+    bool? enableThinking,
   }) async {
-    final cacheKey = CacheService.makeKey('translate', text, schemaName);
+    final thinking = enableThinking ?? thinkingEnabled;
+    final cacheKey = CacheService.makeKey(
+      'translate',
+      text,
+      schemaName,
+      thinking ? 'think' : 'no-think',
+    );
     if (!forceRefresh) {
       final cached = _cache.get<ApiResult<TranslationResponse>>(cacheKey);
       if (cached != null) return cached;
@@ -131,7 +147,11 @@ class TranslationApiService {
       final res = await http.post(
         Uri.parse('$_baseUrl/translate'),
         headers: _headers,
-        body: jsonEncode({'text': text, 'schema_name': schemaName}),
+        body: jsonEncode({
+          'text': text,
+          'schema_name': schemaName,
+          'enable_thinking': thinking,
+        }),
       );
       if (res.statusCode == 200) {
         final json = jsonDecode(res.body) as Map<String, dynamic>;
@@ -153,13 +173,19 @@ class TranslationApiService {
   Future<ApiResult<AsyncJobStatusResponse>> translateAsync(
     String text, {
     String schemaName = 'translate',
+    bool? enableThinking,
   }) async {
+    final thinking = enableThinking ?? thinkingEnabled;
     if (_connectivity.isOffline) return ApiResult.offline();
     try {
       final res = await http.post(
         Uri.parse('$_baseUrl/translate/async'),
         headers: _headers,
-        body: jsonEncode({'text': text, 'schema_name': schemaName}),
+        body: jsonEncode({
+          'text': text,
+          'schema_name': schemaName,
+          'enable_thinking': thinking,
+        }),
       );
       if (res.statusCode == 200) {
         final job = AsyncJobResponse.fromMap(jsonDecode(res.body));
@@ -208,13 +234,16 @@ class TranslationApiService {
     String length = 'medium',
     String style = 'neutral',
     bool forceRefresh = false,
+    bool? enableThinking,
   }) async {
+    final thinking = enableThinking ?? thinkingEnabled;
     final cacheKey = CacheService.makeKey(
       'summarize',
       text,
       language,
       length,
       style,
+      thinking ? 'think' : 'no-think',
     );
     if (!forceRefresh) {
       final cached = _cache.get<ApiResult<SummarizationResponse>>(cacheKey);
@@ -239,6 +268,7 @@ class TranslationApiService {
           'language': language,
           'length': length,
           'style': style,
+          'enable_thinking': thinking,
         }),
       );
       if (res.statusCode == 200) {
@@ -262,8 +292,15 @@ class TranslationApiService {
     String word, {
     String language = 'chi',
     bool forceRefresh = false,
+    bool? enableThinking,
   }) async {
-    final cacheKey = CacheService.makeKey('wordAnalysis', word, language);
+    final thinking = enableThinking ?? thinkingEnabled;
+    final cacheKey = CacheService.makeKey(
+      'wordAnalysis',
+      word,
+      language,
+      thinking ? 'think' : 'no-think',
+    );
     if (!forceRefresh) {
       final cached = _cache.get<ApiResult<WordAnalysisResponse>>(cacheKey);
       if (cached != null) return cached;
@@ -288,6 +325,7 @@ class TranslationApiService {
           'include_synonyms': true,
           'include_antonyms': true,
           'include_alternatives': true,
+          'enable_thinking': thinking,
         }),
       );
       if (res.statusCode == 200) {
@@ -311,8 +349,15 @@ class TranslationApiService {
     String fullText,
     String selectedText, {
     bool forceRefresh = false,
+    bool? enableThinking,
   }) async {
-    final cacheKey = CacheService.makeKey('linguistic', fullText, selectedText);
+    final thinking = enableThinking ?? thinkingEnabled;
+    final cacheKey = CacheService.makeKey(
+      'linguistic',
+      fullText,
+      selectedText,
+      thinking ? 'think' : 'no-think',
+    );
     if (!forceRefresh) {
       final cached = _cache.get<ApiResult<AsyncJobStatusResponse>>(cacheKey);
       if (cached != null) return cached;
@@ -334,6 +379,7 @@ class TranslationApiService {
         body: jsonEncode({
           'full_text': fullText,
           'selected_text': selectedText,
+          'enable_thinking': thinking,
         }),
       );
       if (res.statusCode == 200) {
@@ -363,8 +409,15 @@ class TranslationApiService {
     String text, {
     int questionCount = 5,
     bool forceRefresh = false,
+    bool? enableThinking,
   }) async {
-    final cacheKey = CacheService.makeKey('questions', text, '$questionCount');
+    final thinking = enableThinking ?? thinkingEnabled;
+    final cacheKey = CacheService.makeKey(
+      'questions',
+      text,
+      '$questionCount',
+      thinking ? 'think' : 'no-think',
+    );
     if (!forceRefresh) {
       final cached = _cache.get<ApiResult<AsyncJobStatusResponse>>(cacheKey);
       if (cached != null) return cached;
@@ -383,7 +436,11 @@ class TranslationApiService {
       final res = await http.post(
         Uri.parse('$_baseUrl/questions/async'),
         headers: _headers,
-        body: jsonEncode({'text': text, 'question_count': questionCount}),
+        body: jsonEncode({
+          'text': text,
+          'question_count': questionCount,
+          'enable_thinking': thinking,
+        }),
       );
       if (res.statusCode == 200) {
         final job = AsyncJobResponse.fromMap(jsonDecode(res.body));
@@ -770,6 +827,303 @@ class TranslationApiService {
       return ApiResult.error('Author info failed: ${res.statusCode}');
     } catch (e) {
       return ApiResult.error('Author info error: $e');
+    }
+  }
+
+  //  SSE streaming helpers
+
+  /// POST to [uri] with [body] and parse the response as a stream of
+  /// Server-Sent Events, yielding each as an [SseEvent].
+  Stream<SseEvent> _streamSse(Uri uri, Map<String, dynamic> body) async* {
+    final client = http.Client();
+    try {
+      final request = http.Request('POST', uri);
+      request.headers.addAll(_headers);
+      request.headers['Accept'] = 'text/event-stream';
+      request.body = jsonEncode(body);
+
+      final streamed = await client.send(request);
+      if (streamed.statusCode != 200) {
+        yield SseEvent(
+          type: 'error',
+          data: {'message': 'HTTP ${streamed.statusCode}'},
+        );
+        return;
+      }
+
+      final pending = StringBuffer();
+      await for (final chunk in streamed.stream.transform(utf8.decoder)) {
+        pending.write(chunk);
+        var buf = pending.toString();
+        pending.clear();
+
+        // SSE commonly uses CRLF separators. Normalize once before parsing.
+        buf = buf.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+
+        while (buf.contains('\n\n')) {
+          final idx = buf.indexOf('\n\n');
+          final block = buf.substring(0, idx);
+          buf = buf.substring(idx + 2);
+
+          if (block.trim().isEmpty) continue;
+
+          String? eventType;
+          final dataLines = <String>[];
+          for (final line in block.split('\n')) {
+            if (line.startsWith('event:')) {
+              eventType = line.substring(6).trim();
+            } else if (line.startsWith('data:')) {
+              dataLines.add(line.substring(5).trimLeft());
+            }
+          }
+
+          final dataStr = dataLines.join('\n');
+          if (eventType != null && dataStr.isNotEmpty) {
+            try {
+              final data = jsonDecode(dataStr) as Map<String, dynamic>;
+              yield SseEvent(type: eventType, data: data);
+              if (eventType == 'done') return;
+            } catch (_) {
+              yield const SseEvent(
+                type: 'error',
+                data: {'message': 'Failed to parse streaming response'},
+              );
+              return;
+            }
+          }
+        }
+
+        pending.write(buf);
+      }
+    } finally {
+      client.close();
+    }
+  }
+
+  //  Streaming public API
+
+  /// Stream translation events, yielding [SseEvent]s.
+  /// Checks persistent cache first; caches result on completion.
+  Stream<SseEvent> translateStream(
+    String text, {
+    String schemaName = 'translate',
+    bool forceRefresh = false,
+    bool? enableThinking,
+  }) async* {
+    final thinking = enableThinking ?? thinkingEnabled;
+    final cacheKey = CacheService.makeKey(
+      'translate',
+      text,
+      schemaName,
+      thinking ? 'think' : 'no-think',
+    );
+    final persisted = forceRefresh ? null : await _cache.getJson(cacheKey);
+    if (persisted != null) {
+      yield SseEvent(type: 'result', data: persisted);
+      yield SseEvent(type: 'done', data: {});
+      return;
+    }
+
+    Map<String, dynamic>? resultData;
+    await for (final ev in _streamSse(Uri.parse('$_baseUrl/translate/stream'), {
+      'text': text,
+      'schema_name': schemaName,
+      'enable_thinking': thinking,
+    })) {
+      yield ev;
+      if (ev.type == 'result') resultData = ev.data;
+      if (ev.type == 'done') break;
+    }
+
+    if (resultData != null) {
+      _cache.put(
+        cacheKey,
+        ApiResult.success(TranslationResponse.fromMap(resultData)),
+        ttl: CacheService.longTtl,
+      );
+      _cache.putJson(cacheKey, resultData, ttl: CacheService.longTtl);
+    }
+  }
+
+  /// Stream summarization events, yielding [SseEvent]s.
+  Stream<SseEvent> summarizeStream(
+    String text, {
+    String language = 'chi',
+    String length = 'medium',
+    String style = 'neutral',
+    bool forceRefresh = false,
+    bool? enableThinking,
+  }) async* {
+    final thinking = enableThinking ?? thinkingEnabled;
+    final cacheKey = CacheService.makeKey(
+      'summarize',
+      text,
+      language,
+      length,
+      style,
+      thinking ? 'think' : 'no-think',
+    );
+    final persisted = forceRefresh ? null : await _cache.getJson(cacheKey);
+    if (persisted != null) {
+      yield SseEvent(type: 'result', data: persisted);
+      yield SseEvent(type: 'done', data: {});
+      return;
+    }
+
+    Map<String, dynamic>? resultData;
+    await for (final ev
+        in _streamSse(Uri.parse('$_baseUrl/text/summarize/stream'), {
+          'text': text,
+          'language': language,
+          'length': length,
+          'style': style,
+          'enable_thinking': thinking,
+        })) {
+      yield ev;
+      if (ev.type == 'result') resultData = ev.data;
+      if (ev.type == 'done') break;
+    }
+
+    if (resultData != null) {
+      _cache.put(
+        cacheKey,
+        ApiResult.success(SummarizationResponse.fromMap(resultData)),
+        ttl: CacheService.longTtl,
+      );
+      _cache.putJson(cacheKey, resultData, ttl: CacheService.longTtl);
+    }
+  }
+
+  /// Stream word-analysis events, yielding [SseEvent]s.
+  Stream<SseEvent> analyzeWordStream(
+    String word, {
+    String language = 'chi',
+    String? context,
+    bool forceRefresh = false,
+    bool? enableThinking,
+  }) async* {
+    final thinking = enableThinking ?? thinkingEnabled;
+    final cacheKey = CacheService.makeKey(
+      'analyzeWord',
+      word,
+      language,
+      thinking ? 'think' : 'no-think',
+    );
+    final persisted = forceRefresh ? null : await _cache.getJson(cacheKey);
+    if (persisted != null) {
+      yield SseEvent(type: 'result', data: persisted);
+      yield SseEvent(type: 'done', data: {});
+      return;
+    }
+
+    Map<String, dynamic>? resultData;
+    await for (final ev
+        in _streamSse(Uri.parse('$_baseUrl/word/analyze/stream'), {
+          'word': word,
+          'language': language,
+          if (context != null) 'context': context,
+          'include_synonyms': true,
+          'include_antonyms': true,
+          'include_alternatives': true,
+          'enable_thinking': thinking,
+        })) {
+      yield ev;
+      if (ev.type == 'result') resultData = ev.data;
+      if (ev.type == 'done') break;
+    }
+
+    if (resultData != null) {
+      _cache.put(
+        cacheKey,
+        ApiResult.success(WordAnalysisResponse.fromMap(resultData)),
+        ttl: CacheService.longTtl,
+      );
+      _cache.putJson(cacheKey, resultData, ttl: CacheService.longTtl);
+    }
+  }
+
+  /// Stream question-generation events, yielding [SseEvent]s.
+  Stream<SseEvent> questionsStream(
+    String text, {
+    int questionCount = 5,
+    bool forceRefresh = false,
+    bool? enableThinking,
+  }) async* {
+    final thinking = enableThinking ?? thinkingEnabled;
+    final cacheKey = CacheService.makeKey(
+      'questions',
+      text,
+      '$questionCount',
+      thinking ? 'think' : 'no-think',
+    );
+    final persisted = forceRefresh ? null : await _cache.getJson(cacheKey);
+    if (persisted != null) {
+      yield SseEvent(type: 'result', data: persisted);
+      yield SseEvent(type: 'done', data: {});
+      return;
+    }
+
+    Map<String, dynamic>? resultData;
+    await for (final ev in _streamSse(Uri.parse('$_baseUrl/questions/stream'), {
+      'text': text,
+      'question_count': questionCount,
+      'enable_thinking': thinking,
+    })) {
+      yield ev;
+      if (ev.type == 'result') resultData = ev.data;
+      if (ev.type == 'done') break;
+    }
+
+    if (resultData != null) {
+      _cache.put(
+        cacheKey,
+        ApiResult.success(AsyncJobStatusResponse.fromMap(resultData)),
+        ttl: CacheService.longTtl,
+      );
+      _cache.putJson(cacheKey, resultData, ttl: CacheService.longTtl);
+    }
+  }
+
+  /// Stream linguistic-analysis events, yielding [SseEvent]s.
+  Stream<SseEvent> linguisticStream(
+    String fullText,
+    String selectedText, {
+    bool forceRefresh = false,
+    bool? enableThinking,
+  }) async* {
+    final thinking = enableThinking ?? thinkingEnabled;
+    final cacheKey = CacheService.makeKey(
+      'linguistic',
+      fullText,
+      selectedText,
+      thinking ? 'think' : 'no-think',
+    );
+    final persisted = forceRefresh ? null : await _cache.getJson(cacheKey);
+    if (persisted != null) {
+      yield SseEvent(type: 'result', data: persisted);
+      yield SseEvent(type: 'done', data: {});
+      return;
+    }
+
+    Map<String, dynamic>? resultData;
+    await for (final ev
+        in _streamSse(Uri.parse('$_baseUrl/linguistic/stream'), {
+          'full_text': fullText,
+          'selected_text': selectedText,
+          'enable_thinking': thinking,
+        })) {
+      yield ev;
+      if (ev.type == 'result') resultData = ev.data;
+      if (ev.type == 'done') break;
+    }
+
+    if (resultData != null) {
+      _cache.put(
+        cacheKey,
+        ApiResult.success(AsyncJobStatusResponse.fromMap(resultData)),
+        ttl: CacheService.longTtl,
+      );
+      _cache.putJson(cacheKey, resultData, ttl: CacheService.longTtl);
     }
   }
 }

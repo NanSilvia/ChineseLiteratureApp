@@ -42,7 +42,7 @@ class CacheService {
   /// which are deterministic for the same input).
   static const Duration permanentTtl = Duration(days: 365);
 
-  // --- L1 (in-memory) Core API ---
+  //  L1 (in-memory) Core API
 
   /// Store a value in the in-memory cache only.
   void put<T>(String key, T data, {Duration ttl = defaultTtl}) {
@@ -57,21 +57,33 @@ class CacheService {
       _cache.remove(key);
       return null;
     }
-    return entry.data as T;
+    final data = entry.data;
+    if (data is T) return data;
+    // Type mismatch — remove stale entry and treat as a miss.
+    _cache.remove(key);
+    return null;
   }
 
-  // --- L2 (SQLite) persistent JSON cache ---
+  //  L2 (SQLite) persistent JSON cache
 
   /// Store raw JSON in both L1 and SQLite.
   /// [namespace] is extracted from the first segment of [key] (before ':').
+  ///
+  /// If a typed L1 entry already exists for [key] (e.g. an ApiResult stored
+  /// via [put]), L1 is left untouched so [get<T>] callers keep getting the
+  /// typed value. The JSON is always persisted to L2 for cross-session use.
   Future<void> putJson(
     String key,
     Map<String, dynamic> json, {
     Duration ttl = defaultTtl,
   }) async {
     final expiresAt = DateTime.now().add(ttl);
-    // L1
-    _cache[key] = _CacheEntry<Map<String, dynamic>>(json, expiresAt);
+    // Only write to L1 when there's no existing live entry (avoids
+    // overwriting a typed object with a raw Map under the same key).
+    final existing = _cache[key];
+    if (existing == null || existing.isExpired) {
+      _cache[key] = _CacheEntry<Map<String, dynamic>>(json, expiresAt);
+    }
     // L2 — fire-and-forget write to SQLite
     final namespace = key.contains(':') ? key.split(':').first : '_root';
     _db.putCache(key, namespace, json, expiresAt: expiresAt);
@@ -84,19 +96,24 @@ class CacheService {
     if (entry != null) {
       if (entry.isExpired) {
         _cache.remove(key);
-      } else {
+      } else if (entry.data is Map<String, dynamic>) {
         return entry.data as Map<String, dynamic>;
       }
+      // Type mismatch — fall through to L2 without removing, since the
+      // typed entry may still be valid for get<T>() callers.
     }
     // L2 fallback
     final dbData = await _db.getCache(key);
     if (dbData == null) return null;
-    final json = dbData as Map<String, dynamic>;
-    // Promote back to L1
-    _cache[key] = _CacheEntry<Map<String, dynamic>>(
-      json,
-      DateTime.now().add(longTtl),
-    );
+    if (dbData is! Map<String, dynamic>) return null;
+    final json = dbData;
+    // Promote back to L1 only if there's no existing typed entry.
+    if (!_cache.containsKey(key) || _cache[key]!.isExpired) {
+      _cache[key] = _CacheEntry<Map<String, dynamic>>(
+        json,
+        DateTime.now().add(longTtl),
+      );
+    }
     return json;
   }
 
@@ -131,7 +148,7 @@ class CacheService {
     _cache.removeWhere((_, entry) => entry.isExpired);
   }
 
-  // --- Statistics ---
+  //  Statistics
 
   Map<String, dynamic> get stats {
     _evictExpired();
@@ -143,7 +160,7 @@ class CacheService {
     return {'totalEntries': _cache.length, 'namespaces': namespaces};
   }
 
-  // --- Key helpers ---
+  //  Key helpers
 
   static String makeKey(
     String namespace, [

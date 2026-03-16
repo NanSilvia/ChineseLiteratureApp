@@ -1,8 +1,21 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/translation_models.dart';
 import '../services/translation_api_service.dart';
 import '../services/connectivity_service.dart';
 import '../mandarin_annotator/mandarin_annotator.dart';
+
+// ---------------------------------------------------------------------------
+// Streaming XML parse helpers (file-level, used only within this file)
+// ---------------------------------------------------------------------------
+
+String? _xmlPartial(String buf, String tag) {
+  final open = buf.indexOf('<$tag>');
+  if (open == -1) return null;
+  final start = open + tag.length + 2;
+  final close = buf.indexOf('</$tag>', start);
+  return close == -1 ? buf.substring(start) : buf.substring(start, close);
+}
 
 /// Full-screen page for linguistic analysis.
 ///
@@ -31,6 +44,9 @@ class _LinguisticAnalysisPageState extends State<LinguisticAnalysisPage>
   AsyncJobStatusResponse? _result;
   bool _isLoading = false;
   String? _error;
+  String _streamingText = '';
+  bool _thinkingEnabled = true;
+  StreamSubscription<SseEvent>? _sseSub;
 
   // Dictionary-corrected pinyin (keyed by Chinese text)
   final Map<String, String> _correctedPinyin = {};
@@ -40,10 +56,19 @@ class _LinguisticAnalysisPageState extends State<LinguisticAnalysisPage>
     super.initState();
     // Pre-fill with selected text if provided, otherwise full text
     _selectionController.text = widget.selectedText ?? widget.fullText;
+    _thinkingEnabled = _api.thinkingEnabled;
+  }
+
+  void _toggleThinking() {
+    final next = !_thinkingEnabled;
+    _api.thinkingEnabled = next;
+    setState(() => _thinkingEnabled = next);
+    _analyze(forceRefresh: true);
   }
 
   @override
   void dispose() {
+    _sseSub?.cancel();
     _selectionController.dispose();
     super.dispose();
   }
@@ -57,44 +82,62 @@ class _LinguisticAnalysisPageState extends State<LinguisticAnalysisPage>
       return;
     }
 
+    _sseSub?.cancel();
     setState(() {
       _isLoading = true;
       _error = null;
       _result = null;
+      _streamingText = '';
+      _correctedPinyin.clear();
     });
 
-    final result = await _api.analyzeLinguistic(
-      widget.fullText,
-      selected,
-      forceRefresh: forceRefresh,
-    );
-
-    if (mounted) {
-      if (result.isSuccess) {
-        final data = result.data!;
-        if (data.status == JobStatus.failed) {
-          setState(() {
-            _isLoading = false;
-            _error = data.error ?? 'Analysis failed';
-            _result = null;
-          });
-        } else {
-          // Correct LLM-generated pinyin using dictionary lookup
-          await _correctPinyin(data.result);
-          if (mounted) {
-            setState(() {
-              _isLoading = false;
-              _result = data;
-            });
-          }
-        }
-      } else {
-        setState(() {
-          _isLoading = false;
-          _error = result.error;
-        });
-      }
-    }
+    _sseSub = _api
+        .linguisticStream(widget.fullText, selected, forceRefresh: forceRefresh, enableThinking: _thinkingEnabled)
+        .listen(
+          (ev) async {
+            if (!mounted) return;
+            if (ev.type == 'token') {
+              setState(() => _streamingText += ev.data['t'] as String? ?? '');
+            } else if (ev.type == 'result') {
+              try {
+                final status = AsyncJobStatusResponse.fromMap(ev.data);
+                if (status.status == JobStatus.failed) {
+                  setState(() {
+                    _isLoading = false;
+                    _error = status.error ?? 'Analysis failed';
+                  });
+                } else {
+                  await _correctPinyin(status.result);
+                  if (mounted) {
+                    setState(() => _result = status);
+                  }
+                }
+              } catch (_) {}
+            } else if (ev.type == 'done') {
+              if (mounted) {
+                setState(() => _isLoading = false);
+              }
+            } else if (ev.type == 'error') {
+              if (mounted) {
+                setState(() {
+                  _isLoading = false;
+                  _error = ev.data['message'] as String? ?? 'Streaming error';
+                });
+              }
+            }
+          },
+          onError: (e) {
+            if (mounted) {
+              setState(() {
+                _isLoading = false;
+                _error = e.toString();
+              });
+            }
+          },
+          onDone: () {
+            if (mounted) setState(() => _isLoading = false);
+          },
+        );
   }
 
   /// Use MandarinAnnotator (dictionary-based) to get accurate pinyin for
@@ -144,6 +187,16 @@ class _LinguisticAnalysisPageState extends State<LinguisticAnalysisPage>
         title: const Text('Linguistic Analysis'),
         actions: [
           IconButton(
+            icon: Icon(
+              Icons.psychology,
+              color: _thinkingEnabled ? null : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3),
+            ),
+            tooltip: _thinkingEnabled
+                ? 'Thinking enabled — tap to disable'
+                : 'Thinking disabled — tap to enable',
+            onPressed: _toggleThinking,
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh (bypass cache)',
             onPressed: _isLoading ? null : () => _analyze(forceRefresh: true),
@@ -192,15 +245,161 @@ class _LinguisticAnalysisPageState extends State<LinguisticAnalysisPage>
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 12),
-            Text('Running linguistic analysis…\nThis may take a moment.'),
-          ],
-        ),
+      final cs = Theme.of(context).colorScheme;
+      final buf = _streamingText;
+      final analyzedChinese = _xmlPartial(buf, 'analyzed_chinese');
+      final analyzedPinyin = _xmlPartial(buf, 'analyzed_pinyin');
+      final expansionNote = _xmlPartial(buf, 'expansion_note');
+      final englishTranslation = _xmlPartial(buf, 'english_translation');
+      final sentenceStructure = _xmlPartial(buf, 'sentence_structure');
+      final grammarRules = _xmlPartial(buf, 'grammar_rules');
+
+      final hasContent =
+          analyzedChinese != null ||
+          englishTranslation != null ||
+          sentenceStructure != null ||
+          grammarRules != null;
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const LinearProgressIndicator(minHeight: 2),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (!hasContent)
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 32),
+                        child: const Text(
+                          'Running linguistic analysis\u2026\nThis may take a moment.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      ),
+                    ),
+
+                  // Analyzed text with pinyin
+                  if (analyzedChinese != null &&
+                      analyzedChinese.trim().isNotEmpty) ...[
+                    _card(
+                      cs,
+                      color: cs.primaryContainer.withValues(alpha: 0.3),
+                      borderColor: cs.primaryContainer,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SelectableText(
+                            analyzedChinese.trim(),
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              height: 1.6,
+                            ),
+                          ),
+                          if (analyzedPinyin != null &&
+                              analyzedPinyin.trim().isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            SelectableText(
+                              analyzedPinyin.trim(),
+                              style: TextStyle(
+                                fontSize: 15,
+                                color: cs.primary,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+
+                  // Expansion note
+                  if (expansionNote != null &&
+                      expansionNote.trim().isNotEmpty) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.amber.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            size: 18,
+                            color: Colors.amber.shade800,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              expansionNote.trim(),
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.amber.shade900,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // English translation
+                  if (englishTranslation != null &&
+                      englishTranslation.trim().isNotEmpty) ...[
+                    _sectionHeader('English Translation'),
+                    _card(
+                      cs,
+                      child: SelectableText(
+                        englishTranslation.trim(),
+                        style: const TextStyle(fontSize: 15, height: 1.5),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // Sentence structure
+                  if (sentenceStructure != null &&
+                      sentenceStructure.trim().isNotEmpty) ...[
+                    _sectionHeader('Sentence Structure'),
+                    _card(
+                      cs,
+                      child: SelectableText(
+                        sentenceStructure.trim(),
+                        style: const TextStyle(fontSize: 15, height: 1.5),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // Grammar rules
+                  if (grammarRules != null &&
+                      grammarRules.trim().isNotEmpty) ...[
+                    _sectionHeader('Grammar Rules'),
+                    _card(
+                      cs,
+                      child: SelectableText(
+                        grammarRules.trim(),
+                        style: const TextStyle(fontSize: 15, height: 1.5),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
       );
     }
 

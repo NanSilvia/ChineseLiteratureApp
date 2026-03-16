@@ -1,7 +1,29 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/translation_models.dart';
 import '../services/translation_api_service.dart';
 import '../services/connectivity_service.dart';
+
+// ---------------------------------------------------------------------------
+// Streaming XML parse helpers (file-level, used only within this file)
+// ---------------------------------------------------------------------------
+
+String? _xmlPartial(String buf, String tag) {
+  final open = buf.indexOf('<$tag>');
+  if (open == -1) return null;
+  final start = open + tag.length + 2;
+  final close = buf.indexOf('</$tag>', start);
+  return close == -1 ? buf.substring(start) : buf.substring(start, close);
+}
+
+List<String> _xmlItems(String buf, String parentTag) {
+  final block = _xmlPartial(buf, parentTag);
+  if (block == null) return [];
+  return RegExp(
+    r'<item>(.*?)</item>',
+    dotAll: true,
+  ).allMatches(block).map((m) => m.group(1)!.trim()).toList();
+}
 
 /// Full-screen page showing AI-powered summarization result.
 class SummarizationPage extends StatefulWidget {
@@ -20,6 +42,9 @@ class _SummarizationPageState extends State<SummarizationPage>
   SummarizationResponse? _result;
   bool _isLoading = true;
   String? _error;
+  String _streamingText = '';
+  bool _thinkingEnabled = true;
+  StreamSubscription<SseEvent>? _sseSub;
 
   // Configurable options
   String _length = 'medium';
@@ -31,32 +56,73 @@ class _SummarizationPageState extends State<SummarizationPage>
   @override
   void initState() {
     super.initState();
+    _thinkingEnabled = _api.thinkingEnabled;
     _load();
   }
 
+  void _toggleThinking() {
+    final next = !_thinkingEnabled;
+    _api.thinkingEnabled = next;
+    setState(() => _thinkingEnabled = next);
+    _load(forceRefresh: true);
+  }
+
+  @override
+  void dispose() {
+    _sseSub?.cancel();
+    super.dispose();
+  }
+
   Future<void> _load({bool forceRefresh = false}) async {
+    _sseSub?.cancel();
     setState(() {
       _isLoading = true;
       _error = null;
+      _result = null;
+      _streamingText = '';
     });
 
-    final result = await _api.summarize(
-      widget.text,
-      length: _length,
-      style: _style,
-      forceRefresh: forceRefresh,
-    );
-
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-        if (result.isSuccess) {
-          _result = result.data;
-        } else {
-          _error = result.error;
-        }
-      });
-    }
+    _sseSub = _api
+        .summarizeStream(
+          widget.text,
+          language: 'chi',
+          length: _length,
+          style: _style,
+          forceRefresh: forceRefresh,
+          enableThinking: _thinkingEnabled,
+        )
+        .listen(
+          (ev) {
+            if (!mounted) return;
+            if (ev.type == 'token') {
+              setState(() => _streamingText += ev.data['t'] as String? ?? '');
+            } else if (ev.type == 'result') {
+              try {
+                setState(
+                  () => _result = SummarizationResponse.fromMap(ev.data),
+                );
+              } catch (_) {}
+            } else if (ev.type == 'done') {
+              setState(() => _isLoading = false);
+            } else if (ev.type == 'error') {
+              setState(() {
+                _isLoading = false;
+                _error = ev.data['message'] as String? ?? 'Streaming error';
+              });
+            }
+          },
+          onError: (e) {
+            if (mounted) {
+              setState(() {
+                _isLoading = false;
+                _error = e.toString();
+              });
+            }
+          },
+          onDone: () {
+            if (mounted) setState(() => _isLoading = false);
+          },
+        );
   }
 
   @override
@@ -65,6 +131,16 @@ class _SummarizationPageState extends State<SummarizationPage>
       appBar: AppBar(
         title: const Text('Summarization'),
         actions: [
+          IconButton(
+            icon: Icon(
+              Icons.psychology,
+              color: _thinkingEnabled ? null : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3),
+            ),
+            tooltip: _thinkingEnabled
+                ? 'Thinking enabled — tap to disable'
+                : 'Thinking disabled — tap to enable',
+            onPressed: _toggleThinking,
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh (bypass cache)',
@@ -144,15 +220,97 @@ class _SummarizationPageState extends State<SummarizationPage>
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 12),
-            Text('Summarizing…'),
-          ],
-        ),
+      final cs = Theme.of(context).colorScheme;
+      final summaryContent = _xmlPartial(_streamingText, 'summary');
+      final keyPoints = _xmlItems(_streamingText, 'key_points');
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const LinearProgressIndicator(minHeight: 2),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (summaryContent != null) ...[
+                    Text(
+                      'Summary',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: cs.primaryContainer.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: cs.primaryContainer),
+                      ),
+                      child: SelectableText(
+                        summaryContent.trim(),
+                        style: const TextStyle(fontSize: 16, height: 1.6),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ] else
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 32),
+                        child: Text(
+                          'Summarizing\u2026',
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                      ),
+                    ),
+                  if (keyPoints.isNotEmpty) ...[
+                    Text(
+                      'Key Points',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ...List.generate(
+                      keyPoints.length,
+                      (i) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            CircleAvatar(
+                              radius: 12,
+                              backgroundColor: cs.primary,
+                              child: Text(
+                                '${i + 1}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: cs.onPrimary,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                keyPoints[i],
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
       );
     }
 

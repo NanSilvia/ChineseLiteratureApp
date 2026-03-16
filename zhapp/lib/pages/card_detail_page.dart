@@ -672,7 +672,7 @@ class _CardDetailPageState extends State<CardDetailPage>
     return '${date.day}/${date.month}/${date.year}';
   }
 
-  // ------------ Long-press context menu ------------
+  //  Long-press context menu
 
   void _showTextContextMenu(Offset position, String text) async {
     final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;

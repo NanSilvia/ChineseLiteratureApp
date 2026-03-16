@@ -49,7 +49,7 @@ class ApiService {
   /// Same host as TranslationApiService
   static const String _baseUrl = 'http://192.168.1.155:8000';
 
-  // --- helpers ---
+  //  helpers
 
   /// Auth headers using the current user's JWT token.
   Map<String, String> _authHeaders(String? token) => {
