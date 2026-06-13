@@ -4,9 +4,7 @@ import '../models/translation_models.dart';
 import '../services/translation_api_service.dart';
 import '../services/connectivity_service.dart';
 
-// ---------------------------------------------------------------------------
 // Streaming XML parse helpers (file-level, used only within this file)
-// ---------------------------------------------------------------------------
 
 String? _xmlPartial(String buf, String tag) {
   final open = buf.indexOf('<$tag>');
@@ -25,9 +23,9 @@ List<String> _xmlItems(String buf, String parentTag) {
   ).allMatches(block).map((m) => m.group(1)!.trim()).toList();
 }
 
-/// Full-screen page showing word analysis (synonyms, antonyms, etc.).
+// Full-screen page showing word analysis (synonyms, antonyms, etc.).
 ///
-/// Allows the user to type or paste a Chinese word to analyze in context.
+// Allows the user to type or paste a Chinese word to analyze in context.
 class WordAnalysisPage extends StatefulWidget {
   final String cardText;
 
@@ -88,7 +86,11 @@ class _WordAnalysisPageState extends State<WordAnalysisPage>
     });
 
     _sseSub = _api
-        .analyzeWordStream(word, forceRefresh: forceRefresh, enableThinking: _thinkingEnabled)
+        .analyzeWordStream(
+          word,
+          forceRefresh: forceRefresh,
+          enableThinking: _thinkingEnabled,
+        )
         .listen(
           (ev) {
             if (!mounted) return;
@@ -129,7 +131,11 @@ class _WordAnalysisPageState extends State<WordAnalysisPage>
           IconButton(
             icon: Icon(
               Icons.psychology,
-              color: _thinkingEnabled ? null : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3),
+              color: _thinkingEnabled
+                  ? null
+                  : Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.3),
             ),
             tooltip: _thinkingEnabled
                 ? 'Thinking enabled — tap to disable'

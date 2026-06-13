@@ -4,9 +4,7 @@ import '../models/translation_models.dart';
 import '../services/translation_api_service.dart';
 import '../services/connectivity_service.dart';
 
-// ---------------------------------------------------------------------------
 // Streaming XML parse helpers (file-level, used only within this file)
-// ---------------------------------------------------------------------------
 
 String? _xmlPartial(String buf, String tag) {
   final open = buf.indexOf('<$tag>');
@@ -25,7 +23,7 @@ List<String> _xmlItems(String buf, String parentTag) {
   ).allMatches(block).map((m) => m.group(1)!.trim()).toList();
 }
 
-/// Full-screen page showing AI-powered summarization result.
+// Full-screen page showing AI-powered summarization result.
 class SummarizationPage extends StatefulWidget {
   final String text;
 
@@ -134,7 +132,11 @@ class _SummarizationPageState extends State<SummarizationPage>
           IconButton(
             icon: Icon(
               Icons.psychology,
-              color: _thinkingEnabled ? null : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3),
+              color: _thinkingEnabled
+                  ? null
+                  : Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.3),
             ),
             tooltip: _thinkingEnabled
                 ? 'Thinking enabled — tap to disable'
@@ -158,23 +160,29 @@ class _SummarizationPageState extends State<SummarizationPage>
               spacing: 12,
               runSpacing: 8,
               children: [
-                _dropdownChip(
-                  label: 'Length',
-                  value: _length,
-                  items: _lengths,
-                  onChanged: (v) {
-                    setState(() => _length = v);
-                    _load();
-                  },
+                Builder(
+                  builder: (chipContext) => _dropdownChip(
+                    parentContext: chipContext,
+                    label: 'Length',
+                    value: _length,
+                    items: _lengths,
+                    onChanged: (v) {
+                      setState(() => _length = v);
+                      _load();
+                    },
+                  ),
                 ),
-                _dropdownChip(
-                  label: 'Style',
-                  value: _style,
-                  items: _styles,
-                  onChanged: (v) {
-                    setState(() => _style = v);
-                    _load();
-                  },
+                Builder(
+                  builder: (chipContext) => _dropdownChip(
+                    parentContext: chipContext,
+                    label: 'Style',
+                    value: _style,
+                    items: _styles,
+                    onChanged: (v) {
+                      setState(() => _style = v);
+                      _load();
+                    },
+                  ),
                 ),
               ],
             ),
@@ -187,6 +195,7 @@ class _SummarizationPageState extends State<SummarizationPage>
   }
 
   Widget _dropdownChip({
+    required BuildContext parentContext,
     required String label,
     required String value,
     required List<String> items,
@@ -206,9 +215,25 @@ class _SummarizationPageState extends State<SummarizationPage>
         ],
       ),
       onPressed: () async {
+        final overlay =
+            Overlay.of(parentContext).context.findRenderObject() as RenderBox;
+        final parentBox = parentContext.findRenderObject() as RenderBox;
+        final parentOffset = parentBox.localToGlobal(
+          Offset.zero,
+          ancestor: overlay,
+        );
+
         final picked = await showMenu<String>(
           context: context,
-          position: RelativeRect.fill,
+          position: RelativeRect.fromRect(
+            Rect.fromLTWH(
+              parentOffset.dx,
+              parentOffset.dy + parentBox.size.height,
+              parentBox.size.width,
+              0,
+            ),
+            Offset.zero & overlay.size,
+          ),
           items: items
               .map((i) => PopupMenuItem(value: i, child: Text(i)))
               .toList(),
@@ -342,22 +367,6 @@ class _SummarizationPageState extends State<SummarizationPage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Stats row
-          Wrap(
-            spacing: 8,
-            children: [
-              Chip(
-                avatar: const Icon(Icons.text_fields, size: 16),
-                label: Text('Original: ${_result!.wordCountOriginal} chars'),
-              ),
-              Chip(
-                avatar: const Icon(Icons.short_text, size: 16),
-                label: Text('Summary: ${_result!.wordCountSummary} chars'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
           // Summary
           Text(
             'Summary',

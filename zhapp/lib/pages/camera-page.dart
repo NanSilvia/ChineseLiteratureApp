@@ -6,10 +6,11 @@ import '../services/api_service.dart';
 import '../services/card_notifier.dart';
 import '../services/connectivity_service.dart';
 import '../widgets/image_crop_widget.dart';
+import '../widgets/glowing_title_field.dart';
 
-/// Screen 2: Camera OCR (Chinese Text Extraction)
-/// Allows user to take a photo, crop it, extract Chinese text using OCR,
-/// edit the text, and save it as a new card (online-only save)
+// Screen 2: Camera OCR (Chinese Text Extraction)
+// Allows user to take a photo, crop it, extract Chinese text using OCR,
+// edit the text, and save it as a new card (online-only save)
 class CameraPage extends StatefulWidget {
   final VoidCallback? onCardSaved;
 
@@ -24,17 +25,69 @@ enum CameraPageState { idle, cropping, processing, preview, saving }
 class _CameraPageState extends State<CameraPage> with ConnectivityAware {
   final ApiService _api = ApiService();
   final TextEditingController _textController = TextEditingController();
+  final TextEditingController _titleController = TextEditingController();
 
   CameraPageState _state = CameraPageState.idle;
   String? _extractedText;
   String? _imagePath;
   String? _originalImagePath; // Keep track of original for cleanup
   String? _error;
+  bool _isGeneratingTitle = false;
+  bool _isManualEntry = false;
 
   @override
   void dispose() {
     _textController.dispose();
+    _titleController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickFromGallery() async {
+    try {
+      setState(() {
+        _state = CameraPageState.processing;
+        _error = null;
+        _extractedText = null;
+        _imagePath = null;
+        _originalImagePath = null;
+        _isManualEntry = false;
+        _textController.clear();
+      });
+
+      final picker = ImagePicker();
+      final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+
+      if (image == null) {
+        setState(() => _state = CameraPageState.idle);
+        return;
+      }
+
+      setState(() {
+        _imagePath = image.path;
+        _originalImagePath = image.path;
+        _state = CameraPageState.cropping;
+      });
+    } catch (e) {
+      print('Error picking image: $e');
+      setState(() {
+        _state = CameraPageState.idle;
+        _error = 'Gallery error: $e';
+      });
+    }
+  }
+
+  void _enterManualMode() {
+    setState(() {
+      _state = CameraPageState.preview;
+      _isManualEntry = true;
+      _extractedText = null;
+      _imagePath = null;
+      _originalImagePath = null;
+      _error = null;
+      _textController.clear();
+      _titleController.clear();
+      _isGeneratingTitle = false;
+    });
   }
 
   Future<void> _takePhoto() async {
@@ -63,6 +116,7 @@ class _CameraPageState extends State<CameraPage> with ConnectivityAware {
         _imagePath = image.path;
         _originalImagePath = image.path;
         _state = CameraPageState.cropping;
+        _isManualEntry = false;
       });
     } catch (e) {
       print('Error taking photo: $e');
@@ -124,8 +178,11 @@ class _CameraPageState extends State<CameraPage> with ConnectivityAware {
       setState(() {
         _extractedText = result.text;
         _textController.text = result.text;
+        _titleController.clear();
         _state = CameraPageState.preview;
       });
+      // Kick off async title generation immediately
+      _generateTitle(result.text);
     } catch (e) {
       print('Error during OCR: $e');
       setState(() {
@@ -134,6 +191,19 @@ class _CameraPageState extends State<CameraPage> with ConnectivityAware {
       });
       _cleanupImage();
     }
+  }
+
+  Future<void> _generateTitle(String text) async {
+    if (isOffline) return;
+    setState(() => _isGeneratingTitle = true);
+    final result = await _api.generateCardTitle(text);
+    if (!mounted) return;
+    setState(() {
+      _isGeneratingTitle = false;
+      if (result.isSuccess && result.data != null && result.data!.isNotEmpty) {
+        _titleController.text = result.data!;
+      }
+    });
   }
 
   Future<void> _saveAsCard() async {
@@ -154,8 +224,13 @@ class _CameraPageState extends State<CameraPage> with ConnectivityAware {
       _error = null;
     });
 
+    final titleToSave = _titleController.text.trim();
     try {
-      final result = await _api.createCard(textZh: textToSave, source: 'ocr');
+      final result = await _api.createCard(
+        textZh: textToSave,
+        source: 'ocr',
+        title: titleToSave.isEmpty ? null : titleToSave,
+      );
 
       if (result.isSuccess) {
         _showMessage('Card saved successfully!');
@@ -165,7 +240,10 @@ class _CameraPageState extends State<CameraPage> with ConnectivityAware {
           _extractedText = null;
           _imagePath = null;
           _originalImagePath = null;
+          _isManualEntry = false;
           _textController.clear();
+          _titleController.clear();
+          _isGeneratingTitle = false;
         });
         CardNotifier().notifyCardsChanged();
         widget.onCardSaved?.call();
@@ -194,7 +272,10 @@ class _CameraPageState extends State<CameraPage> with ConnectivityAware {
       _imagePath = null;
       _originalImagePath = null;
       _error = null;
+      _isManualEntry = false;
       _textController.clear();
+      _titleController.clear();
+      _isGeneratingTitle = false;
     });
   }
 
@@ -251,63 +332,72 @@ class _CameraPageState extends State<CameraPage> with ConnectivityAware {
   }
 
   Widget _buildIdleState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.camera_alt_outlined, size: 80, color: Colors.grey),
-            const SizedBox(height: 24),
-            const Text(
-              'Extract Chinese Text',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Take a photo of Chinese text to extract and save it as a card',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey),
-            ),
-            const SizedBox(height: 32),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 32),
+          const Icon(Icons.add_card_outlined, size: 72, color: Colors.grey),
+          const SizedBox(height: 20),
+          const Text(
+            'Add a Card',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Choose how you want to add a new card',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey),
+          ),
+          const SizedBox(height: 32),
 
-            if (_error != null) ...[
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.red.shade200),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.error_outline, color: Colors.red.shade700),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        _error!,
-                        style: TextStyle(color: Colors.red.shade700),
-                      ),
+          if (_error != null) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.red.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.error_outline, color: Colors.red.shade700),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _error!,
+                      style: TextStyle(color: Colors.red.shade700),
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-            ],
-
-            ElevatedButton.icon(
-              onPressed: _takePhoto,
-              icon: const Icon(Icons.camera_alt),
-              label: const Text('Take Photo'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 32,
-                  vertical: 16,
-                ),
+                  ),
+                ],
               ),
             ),
+            const SizedBox(height: 24),
           ],
-        ),
+
+          _AddOptionTile(
+            icon: Icons.document_scanner_outlined,
+            title: 'Scan with Camera',
+            subtitle: 'Take a photo and extract text with OCR',
+            onTap: _takePhoto,
+          ),
+          const SizedBox(height: 12),
+          _AddOptionTile(
+            icon: Icons.photo_library_outlined,
+            title: 'Upload a Photo',
+            subtitle: 'Pick an image from your gallery and scan it',
+            onTap: _pickFromGallery,
+          ),
+          const SizedBox(height: 12),
+          _AddOptionTile(
+            icon: Icons.edit_outlined,
+            title: 'Type Manually',
+            subtitle: 'Enter Chinese text directly without a photo',
+            onTap: _enterManualMode,
+          ),
+        ],
       ),
     );
   }
@@ -396,27 +486,33 @@ class _CameraPageState extends State<CameraPage> with ConnectivityAware {
               ),
             ),
 
-          // Extracted text section - editable
+          // Text section
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Edit Extracted Text',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              Text(
+                _isManualEntry ? 'Enter Text' : 'Edit Extracted Text',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-              TextButton.icon(
-                onPressed: () {
-                  _textController.text = _extractedText ?? '';
-                },
-                icon: const Icon(Icons.restore, size: 18),
-                label: const Text('Reset'),
-              ),
+              if (!_isManualEntry)
+                TextButton.icon(
+                  onPressed: () {
+                    _textController.text = _extractedText ?? '';
+                  },
+                  icon: const Icon(Icons.restore, size: 18),
+                  label: const Text('Reset'),
+                ),
             ],
           ),
           const SizedBox(height: 8),
-          const Text(
-            'You can edit the text below before saving',
-            style: TextStyle(color: Colors.grey, fontSize: 12),
+          Text(
+            _isManualEntry
+                ? 'Type the Chinese text you want to save as a card'
+                : 'You can edit the text below before saving',
+            style: const TextStyle(color: Colors.grey, fontSize: 12),
           ),
           const SizedBox(height: 12),
 
@@ -445,6 +541,17 @@ class _CameraPageState extends State<CameraPage> with ConnectivityAware {
               ),
               hintText: 'Enter or edit Chinese text...',
             ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // AI-generated title field
+          GlowingTitleField(
+            controller: _titleController,
+            isGenerating: _isGeneratingTitle,
+            onRegenerate: _isGeneratingTitle
+                ? null
+                : () => _generateTitle(_textController.text.trim()),
           ),
 
           if (_error != null) ...[
@@ -549,6 +656,69 @@ class _CameraPageState extends State<CameraPage> with ConnectivityAware {
           SizedBox(height: 16),
           Text('Saving card...'),
         ],
+      ),
+    );
+  }
+}
+
+class _AddOptionTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _AddOptionTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: Theme.of(context).primaryColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: Theme.of(context).primaryColor),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(color: Colors.grey, fontSize: 13),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: Colors.grey.shade400),
+          ],
+        ),
       ),
     );
   }

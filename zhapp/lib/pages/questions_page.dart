@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
 import '../models/translation_models.dart';
+import '../services/api_service.dart';
 import '../services/translation_api_service.dart';
 import '../services/connectivity_service.dart';
+import 'review_history_page.dart';
 
 String? _xmlPartial(String buf, String tag) {
   final open = buf.indexOf('<$tag>');
@@ -36,11 +39,22 @@ List<Map<String, dynamic>> _streamingQuestions(String buf) {
   }).toList();
 }
 
-/// Full-screen page that generates comprehension questions from Chinese text.
+// Full-screen page that generates comprehension questions from Chinese text.
 class QuestionsPage extends StatefulWidget {
   final String text;
+  final int? cardId;
+  final bool isReplay;
+  final int questionCount;
+  final String difficulty;
 
-  const QuestionsPage({super.key, required this.text});
+  const QuestionsPage({
+    super.key,
+    required this.text,
+    this.cardId,
+    this.isReplay = false,
+    required this.questionCount,
+    this.difficulty = 'medium',
+  });
 
   @override
   State<QuestionsPage> createState() => _QuestionsPageState();
@@ -48,11 +62,13 @@ class QuestionsPage extends StatefulWidget {
 
 class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
   final TranslationApiService _api = TranslationApiService();
+  final ApiService _apiService = ApiService();
+  late final ConfettiController _confettiCtrl;
 
   AsyncJobStatusResponse? _result;
+  List<Map<String, dynamic>>? _shuffledQuestions;
   bool _isLoading = false;
   String? _error;
-  int _questionCount = 5;
   String _streamingText = '';
   bool _thinkingEnabled = true;
   StreamSubscription<SseEvent>? _sseSub;
@@ -61,9 +77,16 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
   final Map<int, int> _answers = {};
   bool _showAnswers = false;
 
+  // Celebration state
+  bool _showCelebration = false;
+  bool _sessionSaved = false;
+  int _lastScore = 0;
+  int _lastTotal = 0;
+
   @override
   void initState() {
     super.initState();
+    _confettiCtrl = ConfettiController(duration: const Duration(seconds: 4));
     _thinkingEnabled = _api.thinkingEnabled;
     _load();
   }
@@ -78,6 +101,7 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
   @override
   void dispose() {
     _sseSub?.cancel();
+    _confettiCtrl.dispose();
     super.dispose();
   }
 
@@ -87,15 +111,19 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
       _isLoading = true;
       _error = null;
       _result = null;
+      _shuffledQuestions = null;
       _streamingText = '';
       _answers.clear();
       _showAnswers = false;
+      _showCelebration = false;
+      _sessionSaved = false;
     });
 
     _sseSub = _api
         .questionsStream(
           widget.text,
-          questionCount: _questionCount,
+          questionCount: widget.questionCount,
+          difficulty: widget.difficulty,
           forceRefresh: forceRefresh,
           enableThinking: _thinkingEnabled,
         )
@@ -113,7 +141,11 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
                     _error = status.error ?? 'Question generation failed';
                   });
                 } else {
-                  setState(() => _result = status);
+                  final rawQ = _extractQuestions(status.result);
+                  setState(() {
+                    _result = status;
+                    _shuffledQuestions = _applyShuffling(rawQ);
+                  });
                 }
               } catch (_) {}
             } else if (ev.type == 'done') {
@@ -139,23 +171,94 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
         );
   }
 
+  List<dynamic> _extractQuestions(dynamic data) {
+    if (data is Map && data['questions_list'] is List) {
+      return data['questions_list'] as List;
+    }
+    if (data is List) return data;
+    if (data is Map && data['questions'] is List) {
+      return data['questions'] as List;
+    }
+    return [];
+  }
+
+  List<Map<String, dynamic>> _applyShuffling(List<dynamic> raw) {
+    final processed = raw.map((item) {
+      if (item is! Map) return <String, dynamic>{};
+      final q = Map<String, dynamic>.from(item);
+      final options =
+          (q['possible_answers'] as List?)?.map((e) => e.toString()).toList() ??
+          [];
+      final correctIdx = (q['correct_answer_index'] as int?) ?? 0;
+      if (options.isEmpty) return q;
+
+      final indices = List<int>.generate(options.length, (i) => i)..shuffle();
+      return {
+        ...q,
+        'possible_answers': indices.map((i) => options[i]).toList(),
+        'correct_answer_index': indices.indexOf(correctIdx),
+      };
+    }).toList();
+    processed.shuffle();
+    return processed;
+  }
+
+  List<dynamic> get _currentQuestions => _shuffledQuestions ?? [];
+
+  void _revealAnswers() {
+    final questions = _currentQuestions;
+    if (questions.isEmpty) return;
+
+    final correct = _answers.entries
+        .where((e) {
+          final q = questions[e.key];
+          if (q is! Map) return false;
+          return e.value == (q['correct_answer_index'] as int?);
+        })
+        .length;
+    final total = questions.length;
+
+    if (widget.cardId != null && !_sessionSaved) {
+      _sessionSaved = true;
+      _apiService.saveReviewSession(widget.cardId!, correct, total);
+    }
+
+    setState(() {
+      _showAnswers = true;
+      _showCelebration = true;
+      _lastScore = correct;
+      _lastTotal = total;
+    });
+    _confettiCtrl.play();
+  }
+
+  String _congratsMessage(double pct) {
+    if (pct == 1.0) return '完美！ PERFECT SCORE! 🎊';
+    if (pct >= 0.8) return '优秀！ Excellent! 🌟';
+    if (pct >= 0.6) return '不错！ Good effort! 💪';
+    return '继续努力！ Keep grinding! 🏋️';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Comprehension Questions'),
+        title: Text(widget.isReplay ? 'Replay' : 'Comprehension Questions'),
         actions: [
-          IconButton(
-            icon: Icon(
-              Icons.psychology,
-              color: _thinkingEnabled ? null : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3),
+          if (!widget.isReplay)
+            IconButton(
+              icon: Icon(
+                Icons.psychology,
+                color: _thinkingEnabled
+                    ? null
+                    : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3),
+              ),
+              tooltip: _thinkingEnabled
+                  ? 'Thinking enabled — tap to disable'
+                  : 'Thinking disabled — tap to enable',
+              onPressed: _toggleThinking,
             ),
-            tooltip: _thinkingEnabled
-                ? 'Thinking enabled — tap to disable'
-                : 'Thinking disabled — tap to enable',
-            onPressed: _toggleThinking,
-          ),
-          if (_result != null)
+          if (!widget.isReplay && _result != null && !_showCelebration)
             IconButton(
               icon: const Icon(Icons.refresh),
               tooltip: 'Regenerate (bypass cache)',
@@ -166,48 +269,23 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
       body: Column(
         children: [
           const OfflineBanner(),
-          // Controls
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              children: [
-                const Text('Questions: '),
-                Slider(
-                  value: _questionCount.toDouble(),
-                  min: 1,
-                  max: 20,
-                  divisions: 19,
-                  label: '$_questionCount',
-                  onChanged: (v) => setState(() => _questionCount = v.round()),
-                  onChangeEnd: (_) => _load(),
-                ),
-                SizedBox(
-                  width: 28,
-                  child: Text(
-                    '$_questionCount',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
+          if (!_showCelebration) const Divider(height: 1),
           Expanded(child: _buildBody()),
         ],
       ),
-      floatingActionButton: _result != null
+      floatingActionButton: (_result != null && !_showAnswers && !_showCelebration)
           ? FloatingActionButton.extended(
-              onPressed: () => setState(() => _showAnswers = !_showAnswers),
-              icon: Icon(
-                _showAnswers ? Icons.visibility_off : Icons.visibility,
-              ),
-              label: Text(_showAnswers ? 'Hide Answers' : 'Show Answers'),
+              onPressed: _revealAnswers,
+              icon: const Icon(Icons.visibility),
+              label: const Text('Show Answers'),
             )
           : null,
     );
   }
 
   Widget _buildBody() {
+    if (_showCelebration) return _buildCelebration();
+
     if (_isLoading) {
       final questions = _streamingQuestions(_streamingText);
       return Column(
@@ -220,7 +298,7 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
             const Expanded(
               child: Center(
                 child: Text(
-                  'Generating questions\u2026\nThis may take a moment.',
+                  'Generating questions…\nThis may take a moment.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.grey),
                 ),
@@ -256,15 +334,7 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
       return const Center(child: Text('No questions generated yet.'));
     }
 
-    final data = _result!.result;
-    if (data == null) {
-      return const Center(child: Text('No data returned.'));
-    }
-
-    // Parse questions — backend returns:
-    // {questions_list: [{question_prompt, possible_answers: [str,...], correct_answer_index: int}]}
-    final questions = _extractQuestions(data);
-
+    final questions = _currentQuestions;
     if (questions.isEmpty) {
       return const Center(child: Text('No questions generated.'));
     }
@@ -272,17 +342,95 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
     return _buildQuestionsList(questions);
   }
 
-  List<dynamic> _extractQuestions(dynamic data) {
-    if (data is Map && data['questions_list'] is List) {
-      return data['questions_list'] as List;
-    }
-    if (data is List) {
-      return data;
-    }
-    if (data is Map && data['questions'] is List) {
-      return data['questions'] as List;
-    }
-    return [];
+  Widget _buildCelebration() {
+    final cs = Theme.of(context).colorScheme;
+    final pct = _lastTotal > 0 ? _lastScore / _lastTotal : 0.0;
+    final fullStars = (pct * 5).round();
+
+    return Stack(
+      alignment: Alignment.topCenter,
+      children: [
+        ConfettiWidget(
+          confettiController: _confettiCtrl,
+          blastDirectionality: BlastDirectionality.explosive,
+          numberOfParticles: 40,
+          gravity: 0.2,
+          colors: [
+            cs.primary,
+            cs.secondary,
+            cs.tertiary,
+            Colors.amber,
+            Colors.pink,
+          ],
+        ),
+        Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '$_lastScore / $_lastTotal',
+                  style: TextStyle(
+                    fontSize: 72,
+                    fontWeight: FontWeight.w900,
+                    color: cs.primary,
+                    height: 1,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${(pct * 100).round()}%',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w600,
+                    color: cs.onSurface.withValues(alpha: 0.6),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(5, (i) => Icon(
+                    i < fullStars ? Icons.star_rounded : Icons.star_outline_rounded,
+                    color: Colors.amber,
+                    size: 36,
+                  )),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  _congratsMessage(pct),
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 40),
+                FilledButton.icon(
+                  onPressed: () => setState(() => _showCelebration = false),
+                  icon: const Icon(Icons.list_alt),
+                  label: const Text('Review answers'),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(220, 48),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ReviewHistoryPage(),
+                    ),
+                  ),
+                  icon: const Icon(Icons.bar_chart),
+                  label: const Text('View Study History'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(220, 48),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildQuestionsList(List<dynamic> questions) {
@@ -315,21 +463,16 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
             (qMap['options'] as List?)?.map((e) => e.toString()).toList() ??
             [];
         final correctIndex = qMap['correct_answer_index'] as int?;
-
-        // Track user selection per question
         final userSelection = _answers[index];
 
         return Card(
           elevation: 1,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Question header
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -358,8 +501,6 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
                     ),
                   ],
                 ),
-
-                // Answer options
                 if (possibleAnswers.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   ...possibleAnswers.asMap().entries.map((entry) {
@@ -389,8 +530,7 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
                         borderRadius: BorderRadius.circular(8),
                         onTap: _showAnswers
                             ? null
-                            : () =>
-                                  setState(() => _answers[index] = optionIndex),
+                            : () => setState(() => _answers[index] = optionIndex),
                         child: Container(
                           width: double.infinity,
                           padding: const EdgeInsets.symmetric(
@@ -430,17 +570,11 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
                                 ),
                               ),
                               if (_showAnswers && isCorrect)
-                                Icon(
-                                  Icons.check_circle,
-                                  color: Colors.green.shade700,
-                                  size: 20,
-                                ),
+                                Icon(Icons.check_circle,
+                                    color: Colors.green.shade700, size: 20),
                               if (_showAnswers && isSelected && !isCorrect)
-                                Icon(
-                                  Icons.cancel,
-                                  color: Colors.red.shade700,
-                                  size: 20,
-                                ),
+                                Icon(Icons.cancel,
+                                    color: Colors.red.shade700, size: 20),
                             ],
                           ),
                         ),
@@ -456,3 +590,4 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
     );
   }
 }
+

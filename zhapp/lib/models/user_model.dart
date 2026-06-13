@@ -1,4 +1,4 @@
-/// User model for authentication
+// User model for authentication
 class UserModel {
   final int? id;
   final String username;

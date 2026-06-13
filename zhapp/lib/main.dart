@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:zhapp/mandarin_annotator/annotator_main.dart';
-
+import 'package:flutter/services.dart';
 import 'pages/camera-page.dart';
 import 'pages/repository_page.dart';
+import 'pages/review_history_page.dart';
 import 'pages/settings_page.dart';
+import 'pages/shared_text_page.dart';
 import 'services/connectivity_service.dart';
 import 'services/auth_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setEnabledSystemUIMode(
+    SystemUiMode.manual,
+    overlays: SystemUiOverlay.values,
+  );
   // Initialize services
   ConnectivityService();
   AuthService().init();
@@ -68,9 +73,34 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int _currentIndex = 0;
+  static const _sharingChannel = MethodChannel('com.example.zhapp/sharing');
 
   // Key to refresh repository page when card is saved
   final GlobalKey<State<RepositoryPage>> _repositoryKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    // Handle text shared while the app is already running
+    _sharingChannel.setMethodCallHandler((call) async {
+      if (call.method == 'sharedText' && mounted) {
+        _openSharedTextPage(call.arguments as String);
+      }
+    });
+    // Handle text shared that launched / resumed the app cold
+    _sharingChannel.invokeMethod<String>('getSharedText').then((text) {
+      if (text != null && text.isNotEmpty && mounted) {
+        _openSharedTextPage(text);
+      }
+    });
+  }
+
+  void _openSharedTextPage(String text) {
+    final nav = Navigator.of(context);
+    nav.push(
+      MaterialPageRoute(builder: (_) => SharedTextPage(sharedText: text)),
+    );
+  }
 
   void _onCardSaved() {
     // Switch to repository tab and refresh
@@ -78,7 +108,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _goToSettings() {
-    setState(() => _currentIndex = 2);
+    setState(() => _currentIndex = 3);
   }
 
   @override
@@ -98,6 +128,11 @@ class _HomePageState extends State<HomePage> {
             onGoToSettings: _goToSettings,
             child: CameraPage(onCardSaved: _onCardSaved),
           ),
+          AuthGate(
+            message: 'Please log in to view your study progress.',
+            onGoToSettings: _goToSettings,
+            child: const ReviewHistoryPage(),
+          ),
           const SettingsPage(),
         ],
       ),
@@ -108,12 +143,17 @@ class _HomePageState extends State<HomePage> {
           NavigationDestination(
             icon: Icon(Icons.library_books_outlined),
             selectedIcon: Icon(Icons.library_books),
-            label: 'Repository',
+            label: 'Library',
           ),
           NavigationDestination(
-            icon: Icon(Icons.camera_alt_outlined),
-            selectedIcon: Icon(Icons.camera_alt),
-            label: 'Camera',
+            icon: Icon(Icons.add_box_outlined),
+            selectedIcon: Icon(Icons.add_box),
+            label: 'Add Card',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.bar_chart_outlined),
+            selectedIcon: Icon(Icons.bar_chart),
+            label: 'Progress',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),
@@ -130,8 +170,10 @@ class _HomePageState extends State<HomePage> {
       case 0:
         return 'Library';
       case 1:
-        return 'OCR Camera';
+        return 'Add Card';
       case 2:
+        return 'Study Progress';
+      case 3:
         return 'Settings';
       default:
         return 'Chinese Learning';

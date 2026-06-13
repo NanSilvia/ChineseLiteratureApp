@@ -4,8 +4,8 @@ import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/connectivity_service.dart';
 
-/// Screen 3: Settings (Account / Auth)
-/// Provides login, logout, account details, and create account
+// Screen 3: Settings (Account / Auth)
+// Provides login, logout, account details, and create account
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
 
@@ -97,7 +97,7 @@ class _SettingsPageState extends State<SettingsPage> with ConnectivityAware {
   }
 }
 
-/// Logged in state view
+// Logged in state view
 class _LoggedInView extends StatelessWidget {
   final UserModel user;
   final bool isOnline;
@@ -223,7 +223,7 @@ class _LoggedInView extends StatelessWidget {
   }
 }
 
-/// Login form
+// Login form
 class _LoginForm extends StatefulWidget {
   final bool isOnline;
   final Future<String?> Function(String username, String password) onLogin;
@@ -418,7 +418,7 @@ class _LoginFormState extends State<_LoginForm> {
   }
 }
 
-/// Register form
+// Register form
 class _RegisterForm extends StatefulWidget {
   final bool isOnline;
   final Future<String?> Function(String username, String email, String password)

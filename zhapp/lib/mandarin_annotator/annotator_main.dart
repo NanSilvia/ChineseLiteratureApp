@@ -232,7 +232,7 @@ class _AnnotatorTestPageState extends State<AnnotatorTestPage> {
   }
 }
 
-/// Widget that displays a single annotated word with hover tooltip
+// Widget that displays a single annotated word with hover tooltip
 class AnnotatedWordWidget extends StatefulWidget {
   final Map<String, dynamic> annotation;
 

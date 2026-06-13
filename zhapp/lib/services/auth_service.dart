@@ -4,8 +4,8 @@ import 'db_service.dart';
 import 'cache_service.dart';
 import 'api_service.dart';
 
-/// Service to manage authentication state
-/// Provides a centralized way to check login status and user data
+// Service to manage authentication state
+// Provides a centralized way to check login status and user data
 class AuthService extends ChangeNotifier {
   static final AuthService _instance = AuthService._internal();
 
@@ -27,8 +27,8 @@ class AuthService extends ChangeNotifier {
 
   final ApiService _api = ApiService();
 
-  /// Initialize auth state on app start.
-  /// Validates the stored token with the server via GET /auth/me.
+  // Initialize auth state on app start.
+  // Validates the stored token with the server via GET /auth/me.
   Future<void> init() async {
     if (_isInitialized) return;
 
@@ -54,8 +54,8 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Login with real backend call.
-  /// Returns null on success, or an error message string on failure.
+  // Login with real backend call.
+  // Returns null on success, or an error message string on failure.
   Future<String?> login(String username, String password) async {
     _isLoading = true;
     notifyListeners();
@@ -81,8 +81,8 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  /// Register with real backend call.
-  /// Returns null on success, or an error message string on failure.
+  // Register with real backend call.
+  // Returns null on success, or an error message string on failure.
   Future<String?> register(
     String username,
     String email,
@@ -112,7 +112,7 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  /// Logout — revoke server tokens, clear local data.
+  // Logout — revoke server tokens, clear local data.
   Future<void> logout() async {
     _isLoading = true;
     notifyListeners();
@@ -140,8 +140,8 @@ class AuthService extends ChangeNotifier {
   }
 }
 
-/// Widget for screens that require authentication
-/// Shows locked state with "Go to Settings" button when logged out
+// Widget for screens that require authentication
+// Shows locked state with "Go to Settings" button when logged out
 class AuthGate extends StatelessWidget {
   final Widget child;
   final String message;

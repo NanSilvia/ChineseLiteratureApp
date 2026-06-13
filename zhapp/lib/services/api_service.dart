@@ -4,11 +4,12 @@ import 'package:http/http.dart' as http;
 import '../models/card_model.dart';
 import '../models/folder_model.dart';
 import '../models/user_model.dart';
+import '../models/review_models.dart';
 import 'db_service.dart';
 import 'connectivity_service.dart';
 import 'cache_service.dart';
 
-/// Result wrapper for API operations
+// Result wrapper for API operations
 class ApiResult<T> {
   final T? data;
   final String? error;
@@ -26,9 +27,9 @@ class ApiResult<T> {
   bool get isSuccess => error == null && !isOffline;
 }
 
-/// Service for API calls with offline handling.
-/// Cards, folders, and auth talk to the FastAPI backend over HTTP.
-/// Local SQLite is used as a read cache / offline fallback.
+// Service for API calls with offline handling.
+// Cards, folders, and auth talk to the FastAPI backend over HTTP.
+// Local SQLite is used as a read cache / offline fallback.
 class ApiService {
   static final ApiService _instance = ApiService._internal();
 
@@ -46,31 +47,31 @@ class ApiService {
   List<FolderModel>? _cachedFolders;
   final Map<int, CardModel> _cardByIdCache = {};
 
-  /// Same host as TranslationApiService
-  static const String _baseUrl = 'http://192.168.1.155:8000';
+  // Same host as TranslationApiService
+  static const String apiBaseUrl = 'http://10.0.0.2:8000';
 
   //  helpers
 
-  /// Auth headers using the current user's JWT token.
+  // Auth headers using the current user's JWT token.
   Map<String, String> _authHeaders(String? token) => {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
     if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
   };
 
-  /// Get the current token from the locally-stored user session.
+  // Get the current token from the locally-stored user session.
   Future<String?> _getToken() async {
     final user = await _db.getUser();
     return user?.token;
   }
 
-  /// Invalidate the in-memory cards list cache.
+  // Invalidate the in-memory cards list cache.
   void _invalidateCardsCache() {
     _cachedCards = null;
     _cachedCardsFolderId = null;
   }
 
-  /// Invalidate **all** in-memory caches.
+  // Invalidate **all** in-memory caches.
   void invalidateAll() {
     _invalidateCardsCache();
     _cachedFolders = null;
@@ -78,7 +79,7 @@ class ApiService {
     _cache.removeByPrefix('analysis');
   }
 
-  /// Parse a card from the backend JSON format to [CardModel].
+  // Parse a card from the backend JSON format to [CardModel].
   CardModel _cardFromJson(Map<String, dynamic> json) {
     return CardModel(
       id: json['id'] as int?,
@@ -97,8 +98,8 @@ class ApiService {
 
   // ==================== CARDS ====================
 
-  /// Fetch all cards from server.
-  /// Returns local SQLite data if offline.
+  // Fetch all cards from server.
+  // Returns local SQLite data if offline.
   Future<ApiResult<List<CardModel>>> getCards({int? folderId}) async {
     if (_cachedCards != null && _cachedCardsFolderId == folderId) {
       return ApiResult.success(_cachedCards!);
@@ -113,7 +114,7 @@ class ApiService {
 
     try {
       final token = await _getToken();
-      final uri = Uri.parse('$_baseUrl/cards').replace(
+      final uri = Uri.parse('$apiBaseUrl/cards').replace(
         queryParameters: {
           if (folderId != null) 'folder_id': folderId.toString(),
           'page_size': '200',
@@ -153,7 +154,7 @@ class ApiService {
     }
   }
 
-  /// Fetch a single card by ID.
+  // Fetch a single card by ID.
   Future<ApiResult<CardModel>> getCardById(int id) async {
     if (_cardByIdCache.containsKey(id)) {
       return ApiResult.success(_cardByIdCache[id]!);
@@ -171,7 +172,7 @@ class ApiService {
     try {
       final token = await _getToken();
       final res = await http.get(
-        Uri.parse('$_baseUrl/cards/$id'),
+        Uri.parse('$apiBaseUrl/cards/$id'),
         headers: _authHeaders(token),
       );
 
@@ -193,7 +194,7 @@ class ApiService {
     }
   }
 
-  /// Create a new card on the server.
+  // Create a new card on the server.
   Future<ApiResult<CardModel>> createCard({
     String? title,
     required String textZh,
@@ -205,7 +206,7 @@ class ApiService {
     try {
       final token = await _getToken();
       final res = await http.post(
-        Uri.parse('$_baseUrl/cards'),
+        Uri.parse('$apiBaseUrl/cards'),
         headers: _authHeaders(token),
         body: jsonEncode({
           'title': title,
@@ -234,14 +235,14 @@ class ApiService {
     }
   }
 
-  /// Update an existing card on the server.
+  // Update an existing card on the server.
   Future<ApiResult<CardModel>> updateCard(CardModel card) async {
     if (_connectivity.isOffline) return ApiResult.offline();
 
     try {
       final token = await _getToken();
       final res = await http.put(
-        Uri.parse('$_baseUrl/cards/${card.id}'),
+        Uri.parse('$apiBaseUrl/cards/${card.id}'),
         headers: _authHeaders(token),
         body: jsonEncode({
           'title': card.title,
@@ -264,20 +265,21 @@ class ApiService {
       await _db.updateCard(updated);
       _invalidateCardsCache();
       if (card.id != null) _cardByIdCache.remove(card.id);
+      ReviewSessionNotifier.instance.notifySessionSaved();
       return ApiResult.success(updated);
     } catch (e) {
       return ApiResult.error('Failed to update card: $e');
     }
   }
 
-  /// Delete a card on the server.
+  // Delete a card on the server.
   Future<ApiResult<bool>> deleteCard(int id) async {
     if (_connectivity.isOffline) return ApiResult.offline();
 
     try {
       final token = await _getToken();
       final res = await http.delete(
-        Uri.parse('$_baseUrl/cards/$id'),
+        Uri.parse('$apiBaseUrl/cards/$id'),
         headers: _authHeaders(token),
       );
 
@@ -291,6 +293,7 @@ class ApiService {
       await _db.deleteCard(id);
       _invalidateCardsCache();
       _cardByIdCache.remove(id);
+      ReviewSessionNotifier.instance.notifySessionSaved();
       return ApiResult.success(true);
     } catch (e) {
       return ApiResult.error('Failed to delete card: $e');
@@ -299,7 +302,7 @@ class ApiService {
 
   // ==================== FOLDERS ====================
 
-  /// Fetch all folders from server.
+  // Fetch all folders from server.
   Future<ApiResult<List<FolderModel>>> getFolders() async {
     if (_cachedFolders != null) return ApiResult.success(_cachedFolders!);
 
@@ -312,7 +315,7 @@ class ApiService {
     try {
       final token = await _getToken();
       final res = await http.get(
-        Uri.parse('$_baseUrl/folders'),
+        Uri.parse('$apiBaseUrl/folders'),
         headers: _authHeaders(token),
       );
 
@@ -339,14 +342,14 @@ class ApiService {
     }
   }
 
-  /// Create a new folder on the server.
+  // Create a new folder on the server.
   Future<ApiResult<FolderModel>> createFolder(String name) async {
     if (_connectivity.isOffline) return ApiResult.offline();
 
     try {
       final token = await _getToken();
       final res = await http.post(
-        Uri.parse('$_baseUrl/folders'),
+        Uri.parse('$apiBaseUrl/folders'),
         headers: _authHeaders(token),
         body: jsonEncode({'name': name}),
       );
@@ -374,7 +377,33 @@ class ApiService {
 
   // ==================== ANALYSIS (via backend word/analyze) ====================
 
-  /// Analyze Chinese text using the backend's word analysis endpoint.
+  // Generate an AI title for Chinese text via the backend LLM.
+  Future<ApiResult<String>> generateCardTitle(String textZh) async {
+    if (_connectivity.isOffline) return ApiResult.offline();
+
+    try {
+      final token = await _getToken();
+      final res = await http.post(
+        Uri.parse('$apiBaseUrl/cards/generate-title'),
+        headers: _authHeaders(token),
+        body: jsonEncode({'text_zh': textZh}),
+      );
+
+      if (res.statusCode == 401) {
+        return ApiResult.error('Session expired — please log in again');
+      }
+      if (res.statusCode != 200) {
+        return ApiResult.error('Failed to generate title: ${res.statusCode}');
+      }
+
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      return ApiResult.success(data['title'] as String);
+    } catch (e) {
+      return ApiResult.error('Failed to generate title: $e');
+    }
+  }
+
+  // Analyze Chinese text using the backend's word analysis endpoint.
   Future<ApiResult<Map<String, dynamic>>> analyzeText(String textZh) async {
     final cacheKey = CacheService.makeKey('analysis', textZh);
     final cached = _cache.get<ApiResult<Map<String, dynamic>>>(cacheKey);
@@ -385,7 +414,7 @@ class ApiService {
     try {
       final token = await _getToken();
       final res = await http.post(
-        Uri.parse('$_baseUrl/word/analyze'),
+        Uri.parse('$apiBaseUrl/word/analyze'),
         headers: _authHeaders(token),
         body: jsonEncode({
           'word': textZh,
@@ -422,13 +451,13 @@ class ApiService {
 
   // ==================== AUTHENTICATION ====================
 
-  /// Login — calls POST /auth/login and stores tokens locally.
+  // Login — calls POST /auth/login and stores tokens locally.
   Future<ApiResult<UserModel>> login(String username, String password) async {
     if (_connectivity.isOffline) return ApiResult.offline();
 
     try {
       final res = await http.post(
-        Uri.parse('$_baseUrl/auth/login'),
+        Uri.parse('$apiBaseUrl/auth/login'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'username': username, 'password': password}),
       );
@@ -458,7 +487,7 @@ class ApiService {
     }
   }
 
-  /// Register — calls POST /auth/register and stores tokens locally.
+  // Register — calls POST /auth/register and stores tokens locally.
   Future<ApiResult<UserModel>> register(
     String username,
     String email,
@@ -468,7 +497,7 @@ class ApiService {
 
     try {
       final res = await http.post(
-        Uri.parse('$_baseUrl/auth/register'),
+        Uri.parse('$apiBaseUrl/auth/register'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'username': username,
@@ -505,13 +534,13 @@ class ApiService {
     }
   }
 
-  /// Logout — revoke server tokens and clear local session.
+  // Logout — revoke server tokens and clear local session.
   Future<ApiResult<bool>> logout() async {
     try {
       final token = await _getToken();
       if (_connectivity.isOnline && token != null) {
         await http.post(
-          Uri.parse('$_baseUrl/auth/logout'),
+          Uri.parse('$apiBaseUrl/auth/logout'),
           headers: _authHeaders(token),
         );
       }
@@ -524,7 +553,7 @@ class ApiService {
     }
   }
 
-  /// Validate the stored token with the server via GET /auth/me.
+  // Validate the stored token with the server via GET /auth/me.
   Future<ApiResult<UserModel?>> getCurrentUser() async {
     try {
       final user = await _db.getUser();
@@ -532,7 +561,7 @@ class ApiService {
 
       if (_connectivity.isOnline && user.token != null) {
         final res = await http.get(
-          Uri.parse('$_baseUrl/auth/me'),
+          Uri.parse('$apiBaseUrl/auth/me'),
           headers: _authHeaders(user.token),
         );
 
@@ -554,12 +583,55 @@ class ApiService {
     }
   }
 
-  /// Attempt to refresh the access token using the stored refresh token.
+  Future<ApiResult<bool>> saveReviewSession(
+    int cardId,
+    int score,
+    int totalQuestions,
+  ) async {
+    if (_connectivity.isOffline) return ApiResult.offline();
+    final token = await _getToken();
+    try {
+      final res = await http.post(
+        Uri.parse('$apiBaseUrl/cards/$cardId/reviews'),
+        headers: {..._authHeaders(token), 'Content-Type': 'application/json'},
+        body: jsonEncode({'score': score, 'total_questions': totalQuestions}),
+      );
+      if (res.statusCode == 401)
+        return ApiResult.error('Session expired — please log in again');
+      if (res.statusCode != 201)
+        return ApiResult.error('Failed to save review: ${res.statusCode}');
+      ReviewSessionNotifier.instance.notifySessionSaved();
+      return ApiResult.success(true);
+    } catch (e) {
+      return ApiResult.error('Failed to save review: $e');
+    }
+  }
+
+  Future<ApiResult<ReviewStats>> getReviewStats() async {
+    if (_connectivity.isOffline) return ApiResult.offline();
+    final token = await _getToken();
+    try {
+      final res = await http.get(
+        Uri.parse('$apiBaseUrl/reviews/stats'),
+        headers: _authHeaders(token),
+      );
+      if (res.statusCode == 401)
+        return ApiResult.error('Session expired — please log in again');
+      if (res.statusCode != 200)
+        return ApiResult.error('Server error: ${res.statusCode}');
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      return ApiResult.success(ReviewStats.fromMap(data));
+    } catch (e) {
+      return ApiResult.error('Failed to load stats: $e');
+    }
+  }
+
+  // Attempt to refresh the access token using the stored refresh token.
   Future<UserModel?> _tryRefreshToken(UserModel user) async {
     if (user.refreshToken == null) return null;
     try {
       final res = await http.post(
-        Uri.parse('$_baseUrl/auth/refresh'),
+        Uri.parse('$apiBaseUrl/auth/refresh'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'refresh_token': user.refreshToken}),
       );

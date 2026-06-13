@@ -7,9 +7,9 @@ import '../services/card_notifier.dart';
 import '../services/connectivity_service.dart';
 import 'card_detail_page.dart';
 
-/// Screen 1: Repository (Main Feed)
-/// Shows a single list of all cards sorted most recent -> oldest
-/// with category controls for filtering
+// Screen 1: Repository (Main Feed)
+// Shows a single list of all cards sorted most recent -> oldest
+// with category controls for filtering
 class RepositoryPage extends StatefulWidget {
   const RepositoryPage({super.key});
 

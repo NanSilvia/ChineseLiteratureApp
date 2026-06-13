@@ -1,4 +1,4 @@
-/// Card model representing a learning item with Chinese text
+// Card model representing a learning item with Chinese text
 class CardModel {
   final int? id;
   final String? title;
@@ -18,15 +18,15 @@ class CardModel {
     this.source = 'manual',
   });
 
-  /// First 100 characters of Chinese text for preview
+  // First 100 characters of Chinese text for preview
   String get previewTextZh {
     if (textZh.length <= 100) return textZh;
     return '${textZh.substring(0, 100)}...';
   }
 
-  /// Display title with preview logic
-  /// If title exists and is not empty -> show title
-  /// Otherwise -> null (caller should use previewTextZh)
+  // Display title with preview logic
+  // If title exists and is not empty -> show title
+  // Otherwise -> null (caller should use previewTextZh)
   String? get displayTitle {
     if (title != null && title!.trim().isNotEmpty) {
       return title;

@@ -3,8 +3,8 @@ import '../models/translation_models.dart';
 import '../services/translation_api_service.dart';
 import '../services/connectivity_service.dart';
 
-/// Full-screen page for book search, recommendations, similar-difficulty,
-/// and text research — all book-related endpoints in one tabbed view.
+// Full-screen page for book search, recommendations, similar-difficulty,
+// and text research — all book-related endpoints in one tabbed view.
 class BooksPage extends StatefulWidget {
   final String cardText;
 
@@ -527,7 +527,7 @@ class _DifficultyTabState extends State<_DifficultyTab>
       Chip(label: Text('$label: $value', style: const TextStyle(fontSize: 13)));
 }
 
-/// Simple gauge showing difficulty level and score.
+// Simple gauge showing difficulty level and score.
 class _DifficultyGauge extends StatelessWidget {
   final TextDifficultyMetrics metrics;
   const _DifficultyGauge({required this.metrics});
@@ -605,8 +605,8 @@ class _DifficultyGauge extends StatelessWidget {
   }
 }
 
-/// Card for similar-difficulty texts — mirrors [_BookCard] layout but adds a
-/// difficulty score badge. Tapping opens the same detail bottom sheet.
+// Card for similar-difficulty texts — mirrors [_BookCard] layout but adds a
+// difficulty score badge. Tapping opens the same detail bottom sheet.
 class _SimilarTextBookCard extends StatelessWidget {
   final SimilarTextResult similarText;
   const _SimilarTextBookCard({required this.similarText});

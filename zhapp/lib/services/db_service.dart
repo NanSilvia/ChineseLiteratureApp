@@ -5,6 +5,14 @@ import '../models/card_model.dart';
 import '../models/folder_model.dart';
 import '../models/user_model.dart';
 
+void _initializeDatabaseFactory() {
+  try {
+    databaseFactory;
+  } catch (e) {
+    // If databaseFactory is not initialized, it will be handled by sqflite
+  }
+}
+
 class DbService {
   static final DbService _instance = DbService._internal();
   Database? _db;
@@ -268,7 +276,7 @@ class DbService {
     return UserModel.fromMap(rows.first);
   }
 
-  /// Alias for getUser - used by AuthService
+  // Alias for getUser - used by AuthService
   Future<UserModel?> getCurrentUser() async {
     return getUser();
   }
@@ -278,21 +286,21 @@ class DbService {
     await database.delete('user');
   }
 
-  /// Alias for clearUser - used by AuthService
+  // Alias for clearUser - used by AuthService
   Future<void> deleteUser() async {
     return clearUser();
   }
 
-  /// Clear all user-specific data (cards, folders) for a given user
-  /// Called on logout to ensure data isolation
+  // Clear all user-specific data (cards, folders) for a given user
+  // Called on logout to ensure data isolation
   Future<void> clearUserData(int userId) async {
     final database = await db;
     await database.delete('cards', where: 'userId = ?', whereArgs: [userId]);
     await database.delete('folders', where: 'userId = ?', whereArgs: [userId]);
   }
 
-  /// Clear ALL local data — user session, cards, folders, and annotation cache.
-  /// Called on logout to ensure no stale data leaks to the next session.
+  // Clear ALL local data — user session, cards, folders, and annotation cache.
+  // Called on logout to ensure no stale data leaks to the next session.
   Future<void> clearAllLocalData() async {
     final database = await db;
     await database.delete('user');
@@ -303,7 +311,7 @@ class DbService {
 
   // ==================== SYNC OPERATIONS ====================
 
-  /// Replace all local cards with server data
+  // Replace all local cards with server data
   Future<void> syncCards(List<CardModel> cards) async {
     final database = await db;
     await database.delete('cards');
@@ -320,7 +328,7 @@ class DbService {
     }
   }
 
-  /// Replace all local folders with server data
+  // Replace all local folders with server data
   Future<void> syncFolders(List<FolderModel> folders) async {
     final database = await db;
     await database.delete('folders');
@@ -331,7 +339,7 @@ class DbService {
 
   // ==================== ANNOTATION CACHE ====================
 
-  /// Store a JSON-serializable value in the persistent annotation cache.
+  // Store a JSON-serializable value in the persistent annotation cache.
   Future<void> putCache(
     String key,
     String namespace,
@@ -348,7 +356,7 @@ class DbService {
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  /// Retrieve a cached value by key, or `null` if not found or expired.
+  // Retrieve a cached value by key, or `null` if not found or expired.
   Future<dynamic> getCache(String key) async {
     final database = await db;
     final rows = await database.query(
@@ -376,7 +384,7 @@ class DbService {
     return jsonDecode(row['data'] as String);
   }
 
-  /// Remove a single cached entry by key.
+  // Remove a single cached entry by key.
   Future<void> clearCacheByKey(String key) async {
     final database = await db;
     await database.delete(
@@ -386,7 +394,7 @@ class DbService {
     );
   }
 
-  /// Remove all cached entries for a given namespace (e.g. 'annotate', 'defs').
+  // Remove all cached entries for a given namespace (e.g. 'annotate', 'defs').
   Future<void> clearCacheByNamespace(String namespace) async {
     final database = await db;
     await database.delete(
@@ -396,13 +404,13 @@ class DbService {
     );
   }
 
-  /// Remove all cached entries.
+  // Remove all cached entries.
   Future<void> clearAllCache() async {
     final database = await db;
     await database.delete('annotation_cache');
   }
 
-  /// Count of cached entries (useful for debug / settings page).
+  // Count of cached entries (useful for debug / settings page).
   Future<int> cacheSize() async {
     final database = await db;
     final result = await database.rawQuery(

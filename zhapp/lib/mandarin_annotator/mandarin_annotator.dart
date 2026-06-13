@@ -5,19 +5,19 @@ import 'package:crypto/crypto.dart';
 import '../services/cache_service.dart';
 import '../services/db_service.dart';
 
-/// MandarinSpot Annotator - Dart wrapper for Chinese text annotation
+// MandarinSpot Annotator - Dart wrapper for Chinese text annotation
 ///
-/// This library provides a simple API to annotate Chinese characters with their
-/// pronunciation and definitions, using the MandarinSpot API.
+// This library provides a simple API to annotate Chinese characters with their
+// pronunciation and definitions, using the MandarinSpot API.
 ///
-/// Usage:
-/// ```dart
-/// final annotator = MandarinAnnotator();
-/// final annotations = await annotator.annotate("你好");
-/// for (var ann in annotations) {
-///   print('${ann["character"]}: ${ann["pinyin"]}');
-/// }
-/// ```
+// Usage:
+// ```dart
+// final annotator = MandarinAnnotator();
+// final annotations = await annotator.annotate("你好");
+// for (var ann in annotations) {
+//   print('${ann["character"]}: ${ann["pinyin"]}');
+// }
+// ```
 
 class MandarinAnnotator {
   static const int _cjkStart = 0x4E00; // 19968
@@ -30,20 +30,20 @@ class MandarinAnnotator {
 
   MandarinAnnotator({this.apiUrl = "https://api.mandarinspot.com"});
 
-  /// Check if a character is CJK (Chinese, Japanese, Korean)
+  // Check if a character is CJK (Chinese, Japanese, Korean)
   bool _isCjkCharacter(String ch) {
     if (ch.isEmpty) return false;
     int charCode = ch.codeUnitAt(0);
     return charCode >= _cjkStart && charCode <= _cjkEnd;
   }
 
-  /// Extract all CJK characters from text
+  // Extract all CJK characters from text
   List<String> extractCjkCharacters(String text) {
     return text.split('').where((ch) => _isCjkCharacter(ch)).toList();
   }
 
-  /// Find all continuous CJK character segments in text
-  /// Returns list of [isCjk, startIndex, endIndex]
+  // Find all continuous CJK character segments in text
+  // Returns list of [isCjk, startIndex, endIndex]
   List<Map<String, dynamic>> findCjkSegments(String text) {
     List<Map<String, dynamic>> segments = [];
     int i = 0;
@@ -63,7 +63,7 @@ class MandarinAnnotator {
     return segments;
   }
 
-  /// Convert number to base-32 string (like JavaScript Number.toString(32))
+  // Convert number to base-32 string (like JavaScript Number.toString(32))
   String _toBase32(int num) {
     if (num == 0) return '0';
     const chars = '0123456789abcdefghijklmnopqrstuvwxyz';
@@ -79,7 +79,7 @@ class MandarinAnnotator {
     return isNegative ? '-$result' : result;
   }
 
-  /// Encode UTF-8 compatible format
+  // Encode UTF-8 compatible format
   List<String> _encodeUtf8(List<String> arr) {
     List<String> result = [];
     for (String s in arr) {
@@ -95,12 +95,12 @@ class MandarinAnnotator {
     return result;
   }
 
-  /// Generate SHA-1 hash of message
+  // Generate SHA-1 hash of message
   String _sha1Hash(String msg) {
     return sha1.convert(utf8.encode(msg)).toString();
   }
 
-  /// Make HTTP request
+  // Make HTTP request
   Future<Map<String, dynamic>> _httpRequest(
     String method,
     String url,
@@ -142,7 +142,7 @@ class MandarinAnnotator {
     }
   }
 
-  /// Get definitions for CJK characters (with client-side cache)
+  // Get definitions for CJK characters (with client-side cache)
   Future<Map<String, dynamic>> getDefinitions(
     List<String> characters, {
     String phoneticType = 'pinyin',
@@ -177,7 +177,7 @@ class MandarinAnnotator {
     return result;
   }
 
-  /// Format character-level annotations
+  // Format character-level annotations
   List<Map<String, dynamic>> _formatAnnotations(
     Map<String, dynamic> defData,
     String text,
@@ -203,7 +203,7 @@ class MandarinAnnotator {
     return annotations;
   }
 
-  /// Create word-level annotations using MandarinSpot's segmentation
+  // Create word-level annotations using MandarinSpot's segmentation
   List<Map<String, dynamic>> _createWordAnnotations(
     String text,
     List<String> cjkChars,
@@ -341,9 +341,9 @@ class MandarinAnnotator {
     return words;
   }
 
-  /// Annotate a single CJK segment independently.
-  /// Each segment is sent to the API separately so the segmenter
-  /// never creates words that span across non-CJK gaps in the original text.
+  // Annotate a single CJK segment independently.
+  // Each segment is sent to the API separately so the segmenter
+  // never creates words that span across non-CJK gaps in the original text.
   Future<List<Map<String, dynamic>>> _annotateSegment(
     List<String> cjkChars,
     String phoneticType,
@@ -380,15 +380,15 @@ class MandarinAnnotator {
     }
   }
 
-  /// Annotate Chinese text (with full-result caching)
+  // Annotate Chinese text (with full-result caching)
   ///
-  /// Args:
-  ///   text: Chinese text to annotate
-  ///   phoneticType: Type of phonetic (pinyin, cantonese, etc)
-  ///   asWords: If true, use word-level segmentation; if false, return individual characters
+  // Args:
+  //   text: Chinese text to annotate
+  //   phoneticType: Type of phonetic (pinyin, cantonese, etc)
+  //   asWords: If true, use word-level segmentation; if false, return individual characters
   ///
-  /// Returns:
-  ///   List of annotations
+  // Returns:
+  //   List of annotations
   Future<List<Map<String, dynamic>>> annotate(
     String text, {
     String phoneticType = 'pinyin',

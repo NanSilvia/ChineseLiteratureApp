@@ -7,7 +7,7 @@ import 'auth_service.dart';
 import 'connectivity_service.dart';
 import 'cache_service.dart';
 
-/// A single Server-Sent Event received from a streaming endpoint.
+// A single Server-Sent Event received from a streaming endpoint.
 class SseEvent {
   final String type;
   final Map<String, dynamic> data;
@@ -15,10 +15,10 @@ class SseEvent {
   const SseEvent({required this.type, required this.data});
 }
 
-/// Service for calling the Translation Analysis API endpoints.
+// Service for calling the Translation Analysis API endpoints.
 ///
-/// All methods return [ApiResult] following the project convention.
-/// Async endpoints are polled automatically until completion.
+// All methods return [ApiResult] following the project convention.
+// Async endpoints are polled automatically until completion.
 class TranslationApiService {
   static final TranslationApiService _instance =
       TranslationApiService._internal();
@@ -31,9 +31,6 @@ class TranslationApiService {
   final CacheService _cache = CacheService();
   bool thinkingEnabled = true;
 
-  // Base URL for the Translation Analysis API
-  static const String _baseUrl = 'http://192.168.1.155:8000';
-
   //  helpers
 
   Map<String, String> get _headers {
@@ -45,8 +42,8 @@ class TranslationApiService {
     };
   }
 
-  /// Check a response for auth / rate-limit errors and return an
-  /// appropriate [ApiResult] if one applies, otherwise `null`.
+  // Check a response for auth / rate-limit errors and return an
+  // appropriate [ApiResult] if one applies, otherwise `null`.
   ApiResult<T>? _checkResponse<T>(http.Response res) {
     if (res.statusCode == 401) {
       return ApiResult.error('Session expired — please log in again');
@@ -57,7 +54,7 @@ class TranslationApiService {
     return null;
   }
 
-  /// Poll an async job until it completes or fails.
+  // Poll an async job until it completes or fails.
   Future<ApiResult<AsyncJobStatusResponse>> _pollJob(
     String statusPath,
     String jobId, {
@@ -68,7 +65,7 @@ class TranslationApiService {
 
     while (DateTime.now().isBefore(deadline)) {
       try {
-        final uri = Uri.parse('$_baseUrl$statusPath/$jobId');
+        final uri = Uri.parse('${ApiService.apiBaseUrl}$statusPath/$jobId');
         final response = await http.get(uri, headers: _headers);
 
         if (response.statusCode == 200) {
@@ -98,7 +95,7 @@ class TranslationApiService {
     if (_connectivity.isOffline) return ApiResult.offline();
     try {
       final res = await http.get(
-        Uri.parse('$_baseUrl/health'),
+        Uri.parse('${ApiService.apiBaseUrl}/health'),
         headers: _headers,
       );
       if (res.statusCode == 200) {
@@ -145,7 +142,7 @@ class TranslationApiService {
     if (_connectivity.isOffline) return ApiResult.offline();
     try {
       final res = await http.post(
-        Uri.parse('$_baseUrl/translate'),
+        Uri.parse('${ApiService.apiBaseUrl}/translate'),
         headers: _headers,
         body: jsonEncode({
           'text': text,
@@ -179,7 +176,7 @@ class TranslationApiService {
     if (_connectivity.isOffline) return ApiResult.offline();
     try {
       final res = await http.post(
-        Uri.parse('$_baseUrl/translate/async'),
+        Uri.parse('${ApiService.apiBaseUrl}/translate/async'),
         headers: _headers,
         body: jsonEncode({
           'text': text,
@@ -208,7 +205,7 @@ class TranslationApiService {
     if (_connectivity.isOffline) return ApiResult.offline();
     try {
       final uri = Uri.parse(
-        '$_baseUrl/batch/translate',
+        '${ApiService.apiBaseUrl}/batch/translate',
       ).replace(queryParameters: {'schema_name': schemaName});
       final res = await http.post(
         uri,
@@ -261,7 +258,7 @@ class TranslationApiService {
     if (_connectivity.isOffline) return ApiResult.offline();
     try {
       final res = await http.post(
-        Uri.parse('$_baseUrl/text/summarize'),
+        Uri.parse('${ApiService.apiBaseUrl}/text/summarize'),
         headers: _headers,
         body: jsonEncode({
           'text': text,
@@ -317,7 +314,7 @@ class TranslationApiService {
     if (_connectivity.isOffline) return ApiResult.offline();
     try {
       final res = await http.post(
-        Uri.parse('$_baseUrl/word/analyze'),
+        Uri.parse('${ApiService.apiBaseUrl}/word/analyze'),
         headers: _headers,
         body: jsonEncode({
           'word': word,
@@ -374,7 +371,7 @@ class TranslationApiService {
     if (_connectivity.isOffline) return ApiResult.offline();
     try {
       final res = await http.post(
-        Uri.parse('$_baseUrl/linguistic/async'),
+        Uri.parse('${ApiService.apiBaseUrl}/linguistic/async'),
         headers: _headers,
         body: jsonEncode({
           'full_text': fullText,
@@ -434,7 +431,7 @@ class TranslationApiService {
     if (_connectivity.isOffline) return ApiResult.offline();
     try {
       final res = await http.post(
-        Uri.parse('$_baseUrl/questions/async'),
+        Uri.parse('${ApiService.apiBaseUrl}/questions/async'),
         headers: _headers,
         body: jsonEncode({
           'text': text,
@@ -494,7 +491,7 @@ class TranslationApiService {
     if (_connectivity.isOffline) return ApiResult.offline();
     try {
       final res = await http.post(
-        Uri.parse('$_baseUrl/books/search'),
+        Uri.parse('${ApiService.apiBaseUrl}/books/search'),
         headers: _headers,
         body: jsonEncode({
           'query': query,
@@ -545,7 +542,7 @@ class TranslationApiService {
     if (_connectivity.isOffline) return ApiResult.offline();
     try {
       final res = await http.post(
-        Uri.parse('$_baseUrl/books/recommend'),
+        Uri.parse('${ApiService.apiBaseUrl}/books/recommend'),
         headers: _headers,
         body: jsonEncode({'text': text, 'limit': limit}),
       );
@@ -596,7 +593,7 @@ class TranslationApiService {
     if (_connectivity.isOffline) return ApiResult.offline();
     try {
       final res = await http.post(
-        Uri.parse('$_baseUrl/books/similar-difficulty'),
+        Uri.parse('${ApiService.apiBaseUrl}/books/similar-difficulty'),
         headers: _headers,
         body: jsonEncode({
           'original_text': text,
@@ -649,7 +646,7 @@ class TranslationApiService {
     if (_connectivity.isOffline) return ApiResult.offline();
     try {
       final res = await http.post(
-        Uri.parse('$_baseUrl/books/research'),
+        Uri.parse('${ApiService.apiBaseUrl}/books/research'),
         headers: _headers,
         body: jsonEncode({
           'original_text': text,
@@ -694,7 +691,7 @@ class TranslationApiService {
     if (_connectivity.isOffline) return ApiResult.offline();
     try {
       final uri = Uri.parse(
-        '$_baseUrl/books/subject/${Uri.encodeComponent(subject)}',
+        '${ApiService.apiBaseUrl}/books/subject/${Uri.encodeComponent(subject)}',
       ).replace(queryParameters: {'limit': '$limit'});
       final res = await http.get(uri, headers: _headers);
       if (res.statusCode == 200) {
@@ -734,7 +731,7 @@ class TranslationApiService {
     if (_connectivity.isOffline) return ApiResult.offline();
     try {
       final uri = Uri.parse(
-        '$_baseUrl/books/author/${Uri.encodeComponent(author)}',
+        '${ApiService.apiBaseUrl}/books/author/${Uri.encodeComponent(author)}',
       ).replace(queryParameters: {'limit': '$limit'});
       final res = await http.get(uri, headers: _headers);
       if (res.statusCode == 200) {
@@ -773,7 +770,9 @@ class TranslationApiService {
     if (_connectivity.isOffline) return ApiResult.offline();
     try {
       final res = await http.get(
-        Uri.parse('$_baseUrl/books/work/${Uri.encodeComponent(workId)}'),
+        Uri.parse(
+          '${ApiService.apiBaseUrl}/books/work/${Uri.encodeComponent(workId)}',
+        ),
         headers: _headers,
       );
       if (res.statusCode == 200) {
@@ -813,7 +812,7 @@ class TranslationApiService {
     try {
       final res = await http.get(
         Uri.parse(
-          '$_baseUrl/books/author-info/${Uri.encodeComponent(authorId)}',
+          '${ApiService.apiBaseUrl}/books/author-info/${Uri.encodeComponent(authorId)}',
         ),
         headers: _headers,
       );
@@ -832,8 +831,8 @@ class TranslationApiService {
 
   //  SSE streaming helpers
 
-  /// POST to [uri] with [body] and parse the response as a stream of
-  /// Server-Sent Events, yielding each as an [SseEvent].
+  // POST to [uri] with [body] and parse the response as a stream of
+  // Server-Sent Events, yielding each as an [SseEvent].
   Stream<SseEvent> _streamSse(Uri uri, Map<String, dynamic> body) async* {
     final client = http.Client();
     try {
@@ -902,8 +901,8 @@ class TranslationApiService {
 
   //  Streaming public API
 
-  /// Stream translation events, yielding [SseEvent]s.
-  /// Checks persistent cache first; caches result on completion.
+  // Stream translation events, yielding [SseEvent]s.
+  // Checks persistent cache first; caches result on completion.
   Stream<SseEvent> translateStream(
     String text, {
     String schemaName = 'translate',
@@ -925,11 +924,10 @@ class TranslationApiService {
     }
 
     Map<String, dynamic>? resultData;
-    await for (final ev in _streamSse(Uri.parse('$_baseUrl/translate/stream'), {
-      'text': text,
-      'schema_name': schemaName,
-      'enable_thinking': thinking,
-    })) {
+    await for (final ev in _streamSse(
+      Uri.parse('${ApiService.apiBaseUrl}/translate/stream'),
+      {'text': text, 'schema_name': schemaName, 'enable_thinking': thinking},
+    )) {
       yield ev;
       if (ev.type == 'result') resultData = ev.data;
       if (ev.type == 'done') break;
@@ -945,7 +943,7 @@ class TranslationApiService {
     }
   }
 
-  /// Stream summarization events, yielding [SseEvent]s.
+  // Stream summarization events, yielding [SseEvent]s.
   Stream<SseEvent> summarizeStream(
     String text, {
     String language = 'chi',
@@ -971,14 +969,16 @@ class TranslationApiService {
     }
 
     Map<String, dynamic>? resultData;
-    await for (final ev
-        in _streamSse(Uri.parse('$_baseUrl/text/summarize/stream'), {
-          'text': text,
-          'language': language,
-          'length': length,
-          'style': style,
-          'enable_thinking': thinking,
-        })) {
+    await for (final ev in _streamSse(
+      Uri.parse('${ApiService.apiBaseUrl}/text/summarize/stream'),
+      {
+        'text': text,
+        'language': language,
+        'length': length,
+        'style': style,
+        'enable_thinking': thinking,
+      },
+    )) {
       yield ev;
       if (ev.type == 'result') resultData = ev.data;
       if (ev.type == 'done') break;
@@ -994,7 +994,7 @@ class TranslationApiService {
     }
   }
 
-  /// Stream word-analysis events, yielding [SseEvent]s.
+  // Stream word-analysis events, yielding [SseEvent]s.
   Stream<SseEvent> analyzeWordStream(
     String word, {
     String language = 'chi',
@@ -1017,16 +1017,18 @@ class TranslationApiService {
     }
 
     Map<String, dynamic>? resultData;
-    await for (final ev
-        in _streamSse(Uri.parse('$_baseUrl/word/analyze/stream'), {
-          'word': word,
-          'language': language,
-          if (context != null) 'context': context,
-          'include_synonyms': true,
-          'include_antonyms': true,
-          'include_alternatives': true,
-          'enable_thinking': thinking,
-        })) {
+    await for (final ev in _streamSse(
+      Uri.parse('${ApiService.apiBaseUrl}/word/analyze/stream'),
+      {
+        'word': word,
+        'language': language,
+        if (context != null) 'context': context,
+        'include_synonyms': true,
+        'include_antonyms': true,
+        'include_alternatives': true,
+        'enable_thinking': thinking,
+      },
+    )) {
       yield ev;
       if (ev.type == 'result') resultData = ev.data;
       if (ev.type == 'done') break;
@@ -1042,10 +1044,11 @@ class TranslationApiService {
     }
   }
 
-  /// Stream question-generation events, yielding [SseEvent]s.
+  // Stream question-generation events, yielding [SseEvent]s.
   Stream<SseEvent> questionsStream(
     String text, {
     int questionCount = 5,
+    String difficulty = 'medium',
     bool forceRefresh = false,
     bool? enableThinking,
   }) async* {
@@ -1054,6 +1057,7 @@ class TranslationApiService {
       'questions',
       text,
       '$questionCount',
+      difficulty,
       thinking ? 'think' : 'no-think',
     );
     final persisted = forceRefresh ? null : await _cache.getJson(cacheKey);
@@ -1064,11 +1068,13 @@ class TranslationApiService {
     }
 
     Map<String, dynamic>? resultData;
-    await for (final ev in _streamSse(Uri.parse('$_baseUrl/questions/stream'), {
-      'text': text,
-      'question_count': questionCount,
-      'enable_thinking': thinking,
-    })) {
+    await for (final ev
+        in _streamSse(Uri.parse('${ApiService.apiBaseUrl}/questions/stream'), {
+          'text': text,
+          'question_count': questionCount,
+          'difficulty': difficulty,
+          'enable_thinking': thinking,
+        })) {
       yield ev;
       if (ev.type == 'result') resultData = ev.data;
       if (ev.type == 'done') break;
@@ -1084,7 +1090,7 @@ class TranslationApiService {
     }
   }
 
-  /// Stream linguistic-analysis events, yielding [SseEvent]s.
+  // Stream linguistic-analysis events, yielding [SseEvent]s.
   Stream<SseEvent> linguisticStream(
     String fullText,
     String selectedText, {
@@ -1107,7 +1113,7 @@ class TranslationApiService {
 
     Map<String, dynamic>? resultData;
     await for (final ev
-        in _streamSse(Uri.parse('$_baseUrl/linguistic/stream'), {
+        in _streamSse(Uri.parse('${ApiService.apiBaseUrl}/linguistic/stream'), {
           'full_text': fullText,
           'selected_text': selectedText,
           'enable_thinking': thinking,

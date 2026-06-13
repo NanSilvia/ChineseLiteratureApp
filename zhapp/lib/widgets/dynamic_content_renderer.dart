@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-/// Recursively renders dynamic JSON-like data as formatted Flutter widgets.
+// Recursively renders dynamic JSON-like data as formatted Flutter widgets.
 ///
-/// Handles: String, int, double, bool, null, List, `Map<String, dynamic>`,
-/// and nested combinations. Avoids calling `.toString()` on complex structures.
+// Handles: String, int, double, bool, null, List, `Map<String, dynamic>`,
+// and nested combinations. Avoids calling `.toString()` on complex structures.
 class DynamicContentRenderer extends StatelessWidget {
   final dynamic data;
   final int depth;
@@ -238,7 +238,7 @@ class DynamicContentRenderer extends StatelessWidget {
     return const TextStyle(fontSize: 15, height: 1.5);
   }
 
-  /// Converts snake_case or camelCase keys to human-readable labels.
+  // Converts snake_case or camelCase keys to human-readable labels.
   static String formatKey(String key) {
     // snake_case → Title Case
     final words = key

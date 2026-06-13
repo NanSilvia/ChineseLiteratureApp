@@ -1,4 +1,4 @@
-/// Folder model representing a category for filtering/sorting cards
+// Folder model representing a category for filtering/sorting cards
 class FolderModel {
   final int? id;
   final String name;

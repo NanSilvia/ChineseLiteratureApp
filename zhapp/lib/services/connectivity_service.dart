@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
-/// Service to monitor network connectivity status
+// Service to monitor network connectivity status
 class ConnectivityService extends ChangeNotifier {
   static final ConnectivityService _instance = ConnectivityService._internal();
 
@@ -43,7 +43,7 @@ class ConnectivityService extends ChangeNotifier {
     }
   }
 
-  /// Force a connectivity check and return the result
+  // Force a connectivity check and return the result
   Future<bool> checkConnection() async {
     await _checkConnectivity();
     return _isOnline;
@@ -56,7 +56,7 @@ class ConnectivityService extends ChangeNotifier {
   }
 }
 
-/// Widget that shows offline banner when device is offline
+// Widget that shows offline banner when device is offline
 class OfflineBanner extends StatelessWidget {
   const OfflineBanner({super.key});
 
@@ -93,7 +93,7 @@ class OfflineBanner extends StatelessWidget {
   }
 }
 
-/// Helper mixin for widgets that need connectivity awareness
+// Helper mixin for widgets that need connectivity awareness
 mixin ConnectivityAware<T extends StatefulWidget> on State<T> {
   late final ConnectivityService _connectivity;
 
@@ -121,6 +121,6 @@ mixin ConnectivityAware<T extends StatefulWidget> on State<T> {
     }
   }
 
-  /// Override to handle connectivity changes
+  // Override to handle connectivity changes
   void onConnectivityChanged(bool isOnline) {}
 }

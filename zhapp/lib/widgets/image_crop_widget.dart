@@ -4,9 +4,9 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
-/// Image cropping widget with 4-point polygon selection.
-/// Users drag 4 corners to define an arbitrary quadrilateral region,
-/// which is then perspective-corrected (projected) to a rectangle for OCR.
+// Image cropping widget with 4-point polygon selection.
+// Users drag 4 corners to define an arbitrary quadrilateral region,
+// which is then perspective-corrected (projected) to a rectangle for OCR.
 class ImageCropWidget extends StatefulWidget {
   final String imagePath;
   final Function(File croppedImage)? onCropComplete;
@@ -24,7 +24,7 @@ class ImageCropWidget extends StatefulWidget {
 }
 
 class _ImageCropWidgetState extends State<ImageCropWidget> {
-  /// Four corner points in display coordinates: TL, TR, BR, BL (clockwise).
+  // Four corner points in display coordinates: TL, TR, BR, BL (clockwise).
   List<Offset> _corners = [];
   Size _imageSize = Size.zero;
   Size _displaySize = Size.zero;
@@ -69,7 +69,7 @@ class _ImageCropWidgetState extends State<ImageCropWidget> {
     }
   }
 
-  /// Find the nearest corner within a touch threshold.
+  // Find the nearest corner within a touch threshold.
   int? _hitTestCorner(Offset point) {
     const threshold = 40.0;
     double minDist = double.infinity;
@@ -185,8 +185,8 @@ class _ImageCropWidgetState extends State<ImageCropWidget> {
 
   //  Homography math
 
-  /// Compute the 3×3 homography that maps [src] points to [dst] points.
-  /// Returns the 8 coefficients [h0..h7] with h8 normalised to 1.
+  // Compute the 3×3 homography that maps [src] points to [dst] points.
+  // Returns the 8 coefficients [h0..h7] with h8 normalised to 1.
   List<double> _computeHomography(List<Offset> src, List<Offset> dst) {
     assert(src.length == 4 && dst.length == 4);
 
@@ -207,7 +207,7 @@ class _ImageCropWidgetState extends State<ImageCropWidget> {
     return _gaussianElimination(a, b);
   }
 
-  /// Solve A·x = b via Gaussian elimination with partial pivoting.
+  // Solve A·x = b via Gaussian elimination with partial pivoting.
   List<double> _gaussianElimination(List<List<double>> a, List<double> b) {
     final n = b.length;
     final aug = List.generate(n, (i) => [...a[i], b[i]]);

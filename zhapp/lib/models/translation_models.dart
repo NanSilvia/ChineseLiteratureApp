@@ -88,7 +88,7 @@ class TranslationResponse {
     );
   }
 
-  /// Combined translation text from all models
+  // Combined translation text from all models
   String get combinedTranslation {
     if (translations.isEmpty) return '';
     final first = translations.values.first;

@@ -6,13 +6,11 @@ import '../models/translation_models.dart';
 import '../services/translation_api_service.dart';
 import '../services/connectivity_service.dart';
 
-// ---------------------------------------------------------------------------
 // Streaming XML parse helpers (file-level, used only within this file)
-// ---------------------------------------------------------------------------
 
-/// Returns the content inside [tag] in [buf]. If the closing tag hasn't
-/// arrived yet, returns everything after the opening tag (partial content).
-/// Returns null if the opening tag hasn't appeared at all.
+// Returns the content inside [tag] in [buf]. If the closing tag hasn't
+// arrived yet, returns everything after the opening tag (partial content).
+// Returns null if the opening tag hasn't appeared at all.
 String? _xmlPartial(String buf, String tag) {
   final open = buf.indexOf('<$tag>');
   if (open == -1) return null;
@@ -31,8 +29,8 @@ String _sanitizeVisibleTranslation(dynamic value) {
   return text.replaceAll(RegExp(r'<[^>]+>'), '').trim();
 }
 
-/// Returns completed `<pair><source>…</source><detail>…</detail></pair>`
-/// blocks found inside [parentTag] as `[source, detail]` pairs.
+// Returns completed `<pair><source>…</source><detail>…</detail></pair>`
+// blocks found inside [parentTag] as `[source, detail]` pairs.
 List<List<String>> _xmlPairs(String buf, String parentTag) {
   final block = _xmlPartial(buf, parentTag);
   if (block == null) return [];
@@ -50,7 +48,7 @@ List<List<String>> _xmlPairs(String buf, String parentTag) {
   return pairs;
 }
 
-/// Returns completed `<item>…</item>` strings found inside [parentTag].
+// Returns completed `<item>…</item>` strings found inside [parentTag].
 List<String> _xmlItems(String buf, String parentTag) {
   final block = _xmlPartial(buf, parentTag);
   if (block == null) return [];
@@ -60,7 +58,7 @@ List<String> _xmlItems(String buf, String parentTag) {
   ).allMatches(block).map((m) => m.group(1)!.trim()).toList();
 }
 
-/// Full-screen page showing translation result for a card's Chinese text.
+// Full-screen page showing translation result for a card's Chinese text.
 class TranslationResultPage extends StatefulWidget {
   final String text;
 
@@ -175,7 +173,11 @@ class _TranslationResultPageState extends State<TranslationResultPage>
           IconButton(
             icon: Icon(
               Icons.psychology,
-              color: _thinkingEnabled ? null : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3),
+              color: _thinkingEnabled
+                  ? null
+                  : Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.3),
             ),
             tooltip: _thinkingEnabled
                 ? 'Thinking enabled — tap to disable'
@@ -367,14 +369,14 @@ class _TranslationResultPageState extends State<TranslationResultPage>
     );
   }
 
-  /// Renders a single model's translation data based on actual backend shape.
+  // Renders a single model's translation data based on actual backend shape.
   ///
-  /// Schema shapes from backend:
-  /// - "translate": {translated_text, explanations: [[part, explanation], ...]}
-  /// - "simple":    {translated_text}
-  /// - "detailed":  {translated_text, grammatical_analysis: [[s,e],...],
-  ///                 challenging_phrases: [[p,e],...], cultural_context,
-  ///                 stylistic_notes, alternative_interpretations: [...]}
+  // Schema shapes from backend:
+  // - "translate": {translated_text, explanations: [[part, explanation], ...]}
+  // - "simple":    {translated_text}
+  // - "detailed":  {translated_text, grammatical_analysis: [[s,e],...],
+  //                 challenging_phrases: [[p,e],...], cultural_context,
+  //                 stylistic_notes, alternative_interpretations: [...]}
   Widget _buildTranslationData(
     Map<String, dynamic> data,
     String modelName,
@@ -515,7 +517,7 @@ class _TranslationResultPageState extends State<TranslationResultPage>
     );
   }
 
-  /// Renders a [part, explanation] tuple as an expandable tile.
+  // Renders a [part, explanation] tuple as an expandable tile.
   Widget _explanationTile(String part, String explanation, ColorScheme cs) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -546,9 +548,7 @@ class _TranslationResultPageState extends State<TranslationResultPage>
     );
   }
 
-  // ---------------------------------------------------------------------------
   // Section-aware streaming display
-  // ---------------------------------------------------------------------------
 
   List<Widget> _buildStreamingSections(ColorScheme cs) {
     final buf = _streamingText;

@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'db_service.dart';
 
-/// A single cache entry with expiration tracking.
+// A single cache entry with expiration tracking.
 class _CacheEntry<T> {
   final T data;
   final DateTime expiresAt;
@@ -12,13 +12,13 @@ class _CacheEntry<T> {
   bool get isExpired => DateTime.now().isAfter(expiresAt);
 }
 
-/// Two-tier cache: fast in-memory L1 + persistent SQLite L2.
+// Two-tier cache: fast in-memory L1 + persistent SQLite L2.
 ///
-/// L1 (in-memory) stores typed Dart objects for zero-cost lookups within a
-/// session. L2 (SQLite `annotation_cache` table) survives app restarts.
+// L1 (in-memory) stores typed Dart objects for zero-cost lookups within a
+// session. L2 (SQLite `annotation_cache` table) survives app restarts.
 ///
-/// Only JSON-serializable data written via [putJson] is persisted. Typed
-/// objects stored via [put] live only in L1.
+// Only JSON-serializable data written via [putJson] is persisted. Typed
+// objects stored via [put] live only in L1.
 class CacheService {
   static final CacheService _instance = CacheService._internal();
 
@@ -29,27 +29,27 @@ class CacheService {
   final Map<String, _CacheEntry<dynamic>> _cache = {};
   final DbService _db = DbService();
 
-  /// Default TTL for cache entries.
+  // Default TTL for cache entries.
   static const Duration defaultTtl = Duration(minutes: 30);
 
-  /// Short TTL for frequently-changing data (book search, health checks).
+  // Short TTL for frequently-changing data (book search, health checks).
   static const Duration shortTtl = Duration(minutes: 5);
 
-  /// Long TTL for rarely-changing data (annotations, translations).
+  // Long TTL for rarely-changing data (annotations, translations).
   static const Duration longTtl = Duration(hours: 2);
 
-  /// Permanent TTL — effectively never expires (for MandarinSpot annotations
-  /// which are deterministic for the same input).
+  // Permanent TTL — effectively never expires (for MandarinSpot annotations
+  // which are deterministic for the same input).
   static const Duration permanentTtl = Duration(days: 365);
 
   //  L1 (in-memory) Core API
 
-  /// Store a value in the in-memory cache only.
+  // Store a value in the in-memory cache only.
   void put<T>(String key, T data, {Duration ttl = defaultTtl}) {
     _cache[key] = _CacheEntry<T>(data, DateTime.now().add(ttl));
   }
 
-  /// Retrieve a value from the in-memory cache.
+  // Retrieve a value from the in-memory cache.
   T? get<T>(String key) {
     final entry = _cache[key];
     if (entry == null) return null;
@@ -66,12 +66,12 @@ class CacheService {
 
   //  L2 (SQLite) persistent JSON cache
 
-  /// Store raw JSON in both L1 and SQLite.
-  /// [namespace] is extracted from the first segment of [key] (before ':').
+  // Store raw JSON in both L1 and SQLite.
+  // [namespace] is extracted from the first segment of [key] (before ':').
   ///
-  /// If a typed L1 entry already exists for [key] (e.g. an ApiResult stored
-  /// via [put]), L1 is left untouched so [get<T>] callers keep getting the
-  /// typed value. The JSON is always persisted to L2 for cross-session use.
+  // If a typed L1 entry already exists for [key] (e.g. an ApiResult stored
+  // via [put]), L1 is left untouched so [get<T>] callers keep getting the
+  // typed value. The JSON is always persisted to L2 for cross-session use.
   Future<void> putJson(
     String key,
     Map<String, dynamic> json, {
@@ -89,7 +89,7 @@ class CacheService {
     _db.putCache(key, namespace, json, expiresAt: expiresAt);
   }
 
-  /// Retrieve raw JSON: check L1 first, then fall back to SQLite.
+  // Retrieve raw JSON: check L1 first, then fall back to SQLite.
   Future<Map<String, dynamic>?> getJson(String key) async {
     // L1 check
     final entry = _cache[key];
@@ -117,33 +117,33 @@ class CacheService {
     return json;
   }
 
-  /// Check whether a non-expired entry exists for [key].
+  // Check whether a non-expired entry exists for [key].
   bool has(String key) => get<dynamic>(key) != null;
 
-  /// Remove a single entry from both L1 and L2.
+  // Remove a single entry from both L1 and L2.
   void remove(String key) {
     _cache.remove(key);
     _db.clearCacheByKey(key);
   }
 
-  /// Remove all entries whose key starts with [prefix] from L1.
+  // Remove all entries whose key starts with [prefix] from L1.
   void removeByPrefix(String prefix) {
     _cache.removeWhere((key, _) => key.startsWith(prefix));
   }
 
-  /// Clear **everything** from both L1 and L2.
+  // Clear **everything** from both L1 and L2.
   void clear() {
     _cache.clear();
     _db.clearAllCache();
   }
 
-  /// Number of live (non-expired) entries in L1.
+  // Number of live (non-expired) entries in L1.
   int get size {
     _evictExpired();
     return _cache.length;
   }
 
-  /// Evict all expired entries (housekeeping).
+  // Evict all expired entries (housekeeping).
   void _evictExpired() {
     _cache.removeWhere((_, entry) => entry.isExpired);
   }

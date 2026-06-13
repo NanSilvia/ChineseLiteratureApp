@@ -5,9 +5,7 @@ import '../services/translation_api_service.dart';
 import '../services/connectivity_service.dart';
 import '../mandarin_annotator/mandarin_annotator.dart';
 
-// ---------------------------------------------------------------------------
 // Streaming XML parse helpers (file-level, used only within this file)
-// ---------------------------------------------------------------------------
 
 String? _xmlPartial(String buf, String tag) {
   final open = buf.indexOf('<$tag>');
@@ -17,10 +15,9 @@ String? _xmlPartial(String buf, String tag) {
   return close == -1 ? buf.substring(start) : buf.substring(start, close);
 }
 
-/// Full-screen page for linguistic analysis.
-///
-/// User selects/enters a portion of the card's text
-/// and the API analyzes sentence structure, grammar patterns, etc.
+// Full-screen page for linguistic analysis.
+// User selects/enters a portion of the card's text
+// and the API analyzes sentence structure, grammar patterns, etc.
 class LinguisticAnalysisPage extends StatefulWidget {
   final String fullText;
   final String? selectedText;
@@ -92,7 +89,12 @@ class _LinguisticAnalysisPageState extends State<LinguisticAnalysisPage>
     });
 
     _sseSub = _api
-        .linguisticStream(widget.fullText, selected, forceRefresh: forceRefresh, enableThinking: _thinkingEnabled)
+        .linguisticStream(
+          widget.fullText,
+          selected,
+          forceRefresh: forceRefresh,
+          enableThinking: _thinkingEnabled,
+        )
         .listen(
           (ev) async {
             if (!mounted) return;
@@ -140,8 +142,8 @@ class _LinguisticAnalysisPageState extends State<LinguisticAnalysisPage>
         );
   }
 
-  /// Use MandarinAnnotator (dictionary-based) to get accurate pinyin for
-  /// the analyzed text and grammar pattern examples, replacing LLM output.
+  // Use MandarinAnnotator (dictionary-based) to get accurate pinyin for
+  // the analyzed text and grammar pattern examples, replacing LLM output.
   Future<void> _correctPinyin(dynamic data) async {
     if (data == null || data is! Map) return;
     final map = Map<String, dynamic>.from(data);
@@ -189,7 +191,11 @@ class _LinguisticAnalysisPageState extends State<LinguisticAnalysisPage>
           IconButton(
             icon: Icon(
               Icons.psychology,
-              color: _thinkingEnabled ? null : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3),
+              color: _thinkingEnabled
+                  ? null
+                  : Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.3),
             ),
             tooltip: _thinkingEnabled
                 ? 'Thinking enabled — tap to disable'
@@ -608,7 +614,6 @@ class _LinguisticAnalysisPageState extends State<LinguisticAnalysisPage>
                           structure,
                           style: TextStyle(
                             fontSize: 13,
-                            fontFamily: 'monospace',
                             color: cs.onSurfaceVariant,
                           ),
                         )

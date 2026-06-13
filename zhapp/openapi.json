@@ -1,0 +1,1463 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Translation Analysis API with Book Research",
+    "description": "REST API for Chinese-English translation analysis using QWEN model with OpenLibrary book search integration",
+    "version": "2.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health Check",
+        "description": "Check API health and active agent configuration.",
+        "operationId": "health_check_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HealthCheckResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/schemas": {
+      "get": {
+        "summary": "List Schemas",
+        "description": "List all available prompting schemas.",
+        "operationId": "list_schemas_schemas_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          }
+        }
+      }
+    },
+    "/translate": {
+      "post": {
+        "summary": "Translate",
+        "description": "Translate text using the configured default agent.\n\nThe agent (claude, qwen, or google) is set via DEFAULT_AGENT environment variable.\n\nExample:\n```json\n{\n    \"text\": \"这是一个测试句子\",\n    \"schema_name\": \"translate\"\n}\n```",
+        "operationId": "translate_translate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/TranslationRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TranslationResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/batch/translate": {
+      "post": {
+        "summary": "Batch Translate",
+        "description": "Translate multiple texts at once using the configured default agent.\n\nQuery parameters:\n- texts: List of texts to translate\n- schema_name: Prompting schema to use (default: \"translate\")",
+        "operationId": "batch_translate_batch_translate_post",
+        "parameters": [
+          {
+            "name": "schema_name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "translate",
+              "title": "Schema Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": { "type": "string" },
+                "title": "Texts"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "summary": "Root",
+        "description": "API root endpoint with usage information.",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          }
+        }
+      }
+    },
+    "/text/summarize": {
+      "post": {
+        "summary": "Summarize Text Endpoint",
+        "description": "Summarize text in the specified language.\n\nProvides AI-powered text summarization with customizable:\n- Length (short, medium, long)\n- Style (neutral, simple, academic)\n- Language-aware summarization\n- Key points extraction\n\nExample:\n```json\n{\n    \"text\": \"北京故宫是中国明清两代的皇家宫殿，旧称紫禁城...\",\n    \"language\": \"chi\",\n    \"length\": \"medium\",\n    \"style\": \"simple\"\n}\n```",
+        "operationId": "summarize_text_endpoint_text_summarize_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/SummarizationRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SummarizationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/word/analyze": {
+      "post": {
+        "summary": "Analyze Word Endpoint",
+        "description": "Analyze a word and get synonyms, antonyms, and alternative wordings.\n\nProvides context-aware word analysis including:\n- Synonyms (similar meanings)\n- Antonyms (opposite meanings)\n- Alternative wordings (different ways to express the same idea)\n- Usage examples\n- Explanation of meaning and usage\n\nExample:\n```json\n{\n    \"word\": \"高兴\",\n    \"context\": \"我今天很高兴。\",\n    \"language\": \"chi\",\n    \"include_synonyms\": true,\n    \"include_antonyms\": true,\n    \"include_alternatives\": true\n}\n```",
+        "operationId": "analyze_word_endpoint_word_analyze_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/WordAnalysisRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WordAnalysisResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/translate/async": {
+      "post": {
+        "summary": "Translate Async",
+        "description": "Submit a translation job asynchronously.\n\nReturns a job_id that can be used to poll the status with GET /translate/status/{job_id}\n\nExample:\n```json\n{\n    \"text\": \"这是一个很长的测试句子，需要翻译...\",\n    \"schema_name\": \"translate\"\n}\n```\n\nPoll with: GET /translate/status/{job_id}",
+        "operationId": "translate_async_translate_async_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AsyncTranslationJob" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AsyncJobResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/translate/status/{job_id}": {
+      "get": {
+        "summary": "Get Translation Status",
+        "description": "Poll the status of an async translation job.\n\nReturns:\n- PENDING: Job is waiting to be processed\n- PROCESSING: Translation is currently running\n- COMPLETED: Translation finished successfully (result included)\n- FAILED: Translation failed (error message included)",
+        "operationId": "get_translation_status_translate_status__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "title": "Job Id" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AsyncJobStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/batch/translate/async": {
+      "post": {
+        "summary": "Batch Translate Async",
+        "description": "Submit multiple translation jobs asynchronously.\n\nReturns a list of job IDs that can be polled individually.\n\nExample:\n```json\n[\n    {\"text\": \"第一个句子\"},\n    {\"text\": \"第二个句子\"},\n    {\"text\": \"第三个句子\"}\n]\n```",
+        "operationId": "batch_translate_async_batch_translate_async_post",
+        "parameters": [
+          {
+            "name": "schema_name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "translate",
+              "title": "Schema Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/AsyncTranslationJob" },
+                "title": "Requests"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/questions/async": {
+      "post": {
+        "summary": "Generate Questions Async",
+        "description": "Submit a question generation job asynchronously.\n\nReturns a job_id that can be used to poll the status with GET /questions/status/{job_id}\n\nExample:\n```json\n{\n    \"text\": \"北京是中国的首都...\",\n    \"question_count\": 5\n}\n```\n\nPoll with: GET /questions/status/{job_id}",
+        "operationId": "generate_questions_async_questions_async_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AsyncQuestionsJob" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/questions/status/{job_id}": {
+      "get": {
+        "summary": "Get Questions Status",
+        "description": "Poll the status of an async question generation job.\n\nReturns:\n- PENDING: Job is waiting to be processed\n- PROCESSING: Question generation is currently running\n- COMPLETED: Question generation finished successfully (result included)\n- FAILED: Question generation failed (error message included)",
+        "operationId": "get_questions_status_questions_status__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "title": "Job Id" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/linguistic/async": {
+      "post": {
+        "summary": "Analyze Linguistic Async",
+        "description": "Submit a linguistic analysis job asynchronously.\n\nAnalyzes the selected_text within the context of full_text, providing:\n- Sentence structure breakdown\n- Grammatical rule explanations\n- Grammar patterns with examples\n- English translation\n- Expansion notes if needed\n\nReturns a job_id that can be used to poll the status with GET /linguistic/status/{job_id}\n\nExample:\n```json\n{\n    \"full_text\": \"北京是中国的首都，也是世界著名的历史文化名城。\",\n    \"selected_text\": \"是中国的首都\"\n}\n```\n\nPoll with: GET /linguistic/status/{job_id}",
+        "operationId": "analyze_linguistic_async_linguistic_async_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AsyncLinguisticJob" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AsyncJobResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/linguistic/status/{job_id}": {
+      "get": {
+        "summary": "Get Linguistic Status",
+        "description": "Poll the status of an async linguistic analysis job.\n\nReturns:\n- PENDING: Job is waiting to be processed\n- PROCESSING: Linguistic analysis is currently running\n- COMPLETED: Analysis finished successfully (result included)\n- FAILED: Analysis failed (error message included)",
+        "operationId": "get_linguistic_status_linguistic_status__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "title": "Job Id" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AsyncJobStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/books/search": {
+      "post": {
+        "tags": ["books"],
+        "summary": "Search Books",
+        "description": "Search for books using OpenLibrary API.\n\nSupports filtering by author, subject, place, person, language, etc.\n\nExample:\n```json\n{\n    \"query\": \"Chinese history\",\n    \"limit\": 10,\n    \"subject\": \"history\",\n    \"language\": \"chi\"\n}\n```\n\nLanguage codes: 'chi' (Chinese), 'eng' (English), 'jpn' (Japanese),\n'fre' (French), 'spa' (Spanish), etc.",
+        "operationId": "search_books_books_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/BookSearchRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BookSearchResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/books/recommend": {
+      "post": {
+        "tags": ["books"],
+        "summary": "Recommend Books",
+        "description": "Analyze text and recommend relevant books.\n\nExtracts keywords from the text and searches for related books.\n\nExample:\n```json\n{\n    \"text\": \"I'm interested in ancient Chinese philosophy and Confucianism\",\n    \"limit\": 5\n}\n```",
+        "operationId": "recommend_books_books_recommend_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BookRecommendationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookRecommendationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/books/similar-difficulty": {
+      "post": {
+        "tags": ["books"],
+        "summary": "Find Similar Difficulty Texts",
+        "description": "Find texts of similar difficulty level to the provided text.\n\nAnalyzes the linguistic complexity of the input text and searches for\nbooks with matching difficulty levels. Useful for language learners\nlooking for appropriately challenging reading material.\n\nExample:\n```json\n{\n    \"original_text\": \"我喜欢看书。今天天气很好。\",\n    \"language\": \"chi\",\n    \"limit\": 5\n}\n```",
+        "operationId": "find_similar_difficulty_texts_books_similar_difficulty_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/TextDifficultyRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TextDifficultyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/books/research": {
+      "post": {
+        "tags": ["books"],
+        "summary": "Research Text",
+        "description": "Translate Chinese text and find related books for further reading.\n\nThis endpoint combines translation with book recommendations:\n1. Translates the Chinese text to English (if translation not provided)\n2. Analyzes the content to extract topics and keywords\n3. Searches OpenLibrary for relevant books\n\nPerfect for finding supplementary reading materials based on Chinese texts.\n\nExample:\n```json\n{\n    \"original_text\": \"北京故宫是中国明清两代的皇家宫殿，建于1406年到1420年。\",\n    \"limit\": 5\n}\n```\n\nReturns the translation plus a list of recommended books for deeper study.",
+        "operationId": "research_text_books_research_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/TextResearchRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TextResearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/books/subject/{subject}": {
+      "get": {
+        "tags": ["books"],
+        "summary": "Get Books By Subject",
+        "description": "Get books on a specific subject/topic.\n\nExample: /books/subject/chinese-history?limit=10",
+        "operationId": "get_books_by_subject_books_subject__subject__get",
+        "parameters": [
+          {
+            "name": "subject",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "title": "Subject" }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 10, "title": "Limit" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/books/author/{author}": {
+      "get": {
+        "tags": ["books"],
+        "summary": "Get Books By Author",
+        "description": "Get books by a specific author.\n\nExample: /books/author/Lu%20Xun?limit=10",
+        "operationId": "get_books_by_author_books_author__author__get",
+        "parameters": [
+          {
+            "name": "author",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "title": "Author" }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 10, "title": "Limit" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/books/work/{work_id}": {
+      "get": {
+        "tags": ["books"],
+        "summary": "Get Work Details",
+        "description": "Get detailed information about a specific work.\n\nExample: /books/work/OL45883W",
+        "operationId": "get_work_details_books_work__work_id__get",
+        "parameters": [
+          {
+            "name": "work_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "title": "Work Id" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/books/author-info/{author_id}": {
+      "get": {
+        "tags": ["books"],
+        "summary": "Get Author Info",
+        "description": "Get detailed information about an author.\n\nExample: /books/author-info/OL23919A",
+        "operationId": "get_author_info_books_author_info__author_id__get",
+        "parameters": [
+          {
+            "name": "author_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "title": "Author Id" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/books/": {
+      "get": {
+        "tags": ["books"],
+        "summary": "Books Root",
+        "description": "Book API information.",
+        "operationId": "books_root_books__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AsyncJobResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id",
+            "description": "Unique job ID for polling"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus",
+            "description": "Current job status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Status message"
+          }
+        },
+        "type": "object",
+        "required": ["job_id", "status", "message"],
+        "title": "AsyncJobResponse",
+        "description": "Response for async job submission."
+      },
+      "AsyncJobStatusResponse": {
+        "properties": {
+          "job_id": { "type": "string", "title": "Job Id" },
+          "status": { "$ref": "#/components/schemas/JobStatus" },
+          "progress": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Progress"
+          },
+          "result": { "anyOf": [{}, { "type": "null" }], "title": "Result" },
+          "error": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Error"
+          },
+          "created_at": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Created At"
+          },
+          "completed_at": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Completed At"
+          }
+        },
+        "type": "object",
+        "required": ["job_id", "status"],
+        "title": "AsyncJobStatusResponse",
+        "description": "Response for job status polling."
+      },
+      "AsyncLinguisticJob": {
+        "properties": {
+          "full_text": {
+            "type": "string",
+            "title": "Full Text",
+            "description": "Complete Chinese text for context"
+          },
+          "selected_text": {
+            "type": "string",
+            "title": "Selected Text",
+            "description": "Text portion to analyze"
+          }
+        },
+        "type": "object",
+        "required": ["full_text", "selected_text"],
+        "title": "AsyncLinguisticJob",
+        "description": "Async linguistic analysis job request."
+      },
+      "AsyncQuestionsJob": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Chinese text to generate questions from"
+          },
+          "question_count": {
+            "type": "integer",
+            "title": "Question Count",
+            "description": "Number of questions to generate (1-20)",
+            "default": 5
+          }
+        },
+        "type": "object",
+        "required": ["text"],
+        "title": "AsyncQuestionsJob",
+        "description": "Async questions generation job request."
+      },
+      "AsyncTranslationJob": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Text to translate (Chinese)"
+          },
+          "schema_name": {
+            "type": "string",
+            "title": "Schema Name",
+            "description": "Prompting schema to use (e.g., 'default', 'simple', 'detailed')",
+            "default": "translate"
+          },
+          "model_override": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Model Override",
+            "description": "Override the default model (e.g., 'qwen3:latest', 'gemma3:27b-it-fp16')"
+          }
+        },
+        "type": "object",
+        "required": ["text"],
+        "title": "AsyncTranslationJob",
+        "description": "Async translation job request."
+      },
+      "BookRecommendationRequest": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Text to analyze for recommendations"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "description": "Number of recommendations",
+            "default": 5
+          },
+          "prefer_diverse_authors": {
+            "type": "boolean",
+            "title": "Prefer Diverse Authors",
+            "description": "Prefer books from different authors",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": ["text"],
+        "title": "BookRecommendationRequest",
+        "description": "Request for book recommendations based on text."
+      },
+      "BookRecommendationResponse": {
+        "properties": {
+          "text_length": { "type": "integer", "title": "Text Length" },
+          "keywords": {
+            "items": { "type": "string" },
+            "type": "array",
+            "title": "Keywords"
+          },
+          "num_found": { "type": "integer", "title": "Num Found" },
+          "recommendations": {
+            "items": { "$ref": "#/components/schemas/BookSummary" },
+            "type": "array",
+            "title": "Recommendations"
+          }
+        },
+        "type": "object",
+        "required": ["text_length", "keywords", "num_found", "recommendations"],
+        "title": "BookRecommendationResponse",
+        "description": "Response with book recommendations."
+      },
+      "BookSearchRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query",
+            "description": "Search query (title, author, ISBN, etc.)"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "description": "Maximum results",
+            "default": 10
+          },
+          "author": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Author",
+            "description": "Filter by author"
+          },
+          "subject": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Subject",
+            "description": "Filter by subject"
+          },
+          "place": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Place",
+            "description": "Filter by place"
+          },
+          "person": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Person",
+            "description": "Filter by person"
+          },
+          "language": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Language",
+            "description": "Filter by language (e.g., 'chi' for Chinese, 'eng' for English, 'jpn' for Japanese)"
+          }
+        },
+        "type": "object",
+        "required": ["query"],
+        "title": "BookSearchRequest",
+        "description": "Request for book search."
+      },
+      "BookSearchResponse": {
+        "properties": {
+          "query": { "type": "string", "title": "Query" },
+          "num_found": { "type": "integer", "title": "Num Found" },
+          "results": {
+            "items": { "$ref": "#/components/schemas/BookSummary" },
+            "type": "array",
+            "title": "Results"
+          }
+        },
+        "type": "object",
+        "required": ["query", "num_found", "results"],
+        "title": "BookSearchResponse",
+        "description": "Response from book search."
+      },
+      "BookSummary": {
+        "properties": {
+          "title": { "type": "string", "title": "Title" },
+          "authors": {
+            "items": { "type": "string" },
+            "type": "array",
+            "title": "Authors"
+          },
+          "first_publish_year": {
+            "anyOf": [{ "type": "integer" }, { "type": "null" }],
+            "title": "First Publish Year"
+          },
+          "isbn": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Isbn"
+          },
+          "subjects": {
+            "items": { "type": "string" },
+            "type": "array",
+            "title": "Subjects"
+          },
+          "publishers": {
+            "items": { "type": "string" },
+            "type": "array",
+            "title": "Publishers"
+          },
+          "language": {
+            "items": { "type": "string" },
+            "type": "array",
+            "title": "Language"
+          },
+          "number_of_pages": {
+            "anyOf": [{ "type": "integer" }, { "type": "null" }],
+            "title": "Number Of Pages"
+          },
+          "openlibrary_key": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Openlibrary Key"
+          },
+          "cover_id": {
+            "anyOf": [{ "type": "integer" }, { "type": "null" }],
+            "title": "Cover Id"
+          },
+          "has_fulltext": {
+            "type": "boolean",
+            "title": "Has Fulltext",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": ["title"],
+        "title": "BookSummary",
+        "description": "Summary of a book from OpenLibrary."
+      },
+      "DictionaryEntry": {
+        "properties": {
+          "source_term": { "type": "string", "title": "Source Term" },
+          "romanized": { "type": "string", "title": "Romanized" },
+          "suggestions": {
+            "items": { "type": "string" },
+            "type": "array",
+            "title": "Suggestions"
+          }
+        },
+        "type": "object",
+        "required": ["source_term", "romanized", "suggestions"],
+        "title": "DictionaryEntry",
+        "description": "Dictionary lookup entry."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": { "$ref": "#/components/schemas/ValidationError" },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthCheckResponse": {
+        "properties": {
+          "status": { "type": "string", "title": "Status" },
+          "message": { "type": "string", "title": "Message" },
+          "ollama_connected": {
+            "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+            "title": "Ollama Connected"
+          },
+          "models_available": {
+            "anyOf": [
+              { "items": { "type": "string" }, "type": "array" },
+              { "type": "null" }
+            ],
+            "title": "Models Available"
+          }
+        },
+        "type": "object",
+        "required": ["status", "message"],
+        "title": "HealthCheckResponse",
+        "description": "Health check response."
+      },
+      "JobStatus": {
+        "type": "string",
+        "enum": ["pending", "processing", "completed", "failed"],
+        "title": "JobStatus",
+        "description": "Status of an async job."
+      },
+      "SimilarTextResult": {
+        "properties": {
+          "title": { "type": "string", "title": "Title" },
+          "authors": {
+            "items": { "type": "string" },
+            "type": "array",
+            "title": "Authors"
+          },
+          "text_preview": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Text Preview"
+          },
+          "difficulty_metrics": {
+            "$ref": "#/components/schemas/TextDifficultyMetrics"
+          },
+          "openlibrary_key": { "type": "string", "title": "Openlibrary Key" },
+          "language": {
+            "items": { "type": "string" },
+            "type": "array",
+            "title": "Language"
+          },
+          "subjects": {
+            "items": { "type": "string" },
+            "type": "array",
+            "title": "Subjects"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "authors",
+          "difficulty_metrics",
+          "openlibrary_key",
+          "language",
+          "subjects"
+        ],
+        "title": "SimilarTextResult",
+        "description": "A text with similar difficulty level."
+      },
+      "SummarizationRequest": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Text to summarize"
+          },
+          "language": {
+            "type": "string",
+            "title": "Language",
+            "description": "Language code (e.g., 'chi', 'eng', 'jpn')",
+            "default": "chi"
+          },
+          "length": {
+            "type": "string",
+            "title": "Length",
+            "description": "Summary length: 'short' (1-2 sentences), 'medium' (3-5 sentences), 'long' (paragraph)",
+            "default": "medium"
+          },
+          "style": {
+            "type": "string",
+            "title": "Style",
+            "description": "Summary style: 'neutral', 'simple' (easy to understand), 'academic' (formal)",
+            "default": "neutral"
+          }
+        },
+        "type": "object",
+        "required": ["text"],
+        "title": "SummarizationRequest",
+        "description": "Request for text summarization."
+      },
+      "SummarizationResponse": {
+        "properties": {
+          "original_text": { "type": "string", "title": "Original Text" },
+          "summary": { "type": "string", "title": "Summary" },
+          "language": { "type": "string", "title": "Language" },
+          "length": { "type": "string", "title": "Length" },
+          "style": { "type": "string", "title": "Style" },
+          "key_points": {
+            "items": { "type": "string" },
+            "type": "array",
+            "title": "Key Points"
+          },
+          "word_count_original": {
+            "type": "integer",
+            "title": "Word Count Original"
+          },
+          "word_count_summary": {
+            "type": "integer",
+            "title": "Word Count Summary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "original_text",
+          "summary",
+          "language",
+          "length",
+          "style",
+          "word_count_original",
+          "word_count_summary"
+        ],
+        "title": "SummarizationResponse",
+        "description": "Response with text summary."
+      },
+      "TextDifficultyMetrics": {
+        "properties": {
+          "character_count": { "type": "integer", "title": "Character Count" },
+          "unique_characters": {
+            "type": "integer",
+            "title": "Unique Characters"
+          },
+          "word_count": { "type": "integer", "title": "Word Count" },
+          "avg_word_length": { "type": "number", "title": "Avg Word Length" },
+          "complexity_score": {
+            "type": "number",
+            "title": "Complexity Score",
+            "description": "Overall complexity score (0-100, higher = more difficult)"
+          },
+          "difficulty_level": {
+            "type": "string",
+            "title": "Difficulty Level",
+            "description": "Difficulty level: beginner, intermediate, advanced, native"
+          },
+          "hsk_level": {
+            "anyOf": [{ "type": "integer" }, { "type": "null" }],
+            "title": "Hsk Level",
+            "description": "HSK level (1-6) for Chinese text, determined by AI"
+          },
+          "vocabulary_complexity": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Vocabulary Complexity",
+            "description": "AI analysis of vocabulary complexity"
+          },
+          "grammar_complexity": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Grammar Complexity",
+            "description": "AI analysis of grammar complexity"
+          },
+          "estimated_study_hours": {
+            "anyOf": [{ "type": "integer" }, { "type": "null" }],
+            "title": "Estimated Study Hours",
+            "description": "Estimated total study hours needed to read this level"
+          }
+        },
+        "type": "object",
+        "required": [
+          "character_count",
+          "unique_characters",
+          "word_count",
+          "avg_word_length",
+          "complexity_score",
+          "difficulty_level"
+        ],
+        "title": "TextDifficultyMetrics",
+        "description": "Difficulty metrics for a text."
+      },
+      "TextDifficultyRequest": {
+        "properties": {
+          "original_text": {
+            "type": "string",
+            "title": "Original Text",
+            "description": "Original text to analyze"
+          },
+          "language": {
+            "type": "string",
+            "title": "Language",
+            "description": "Language code (e.g., 'chi', 'eng', 'jpn')",
+            "default": "chi"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "description": "Number of similar texts to find",
+            "default": 5
+          }
+        },
+        "type": "object",
+        "required": ["original_text"],
+        "title": "TextDifficultyRequest",
+        "description": "Request for finding texts of similar difficulty."
+      },
+      "TextDifficultyResponse": {
+        "properties": {
+          "original_text": { "type": "string", "title": "Original Text" },
+          "difficulty_metrics": {
+            "$ref": "#/components/schemas/TextDifficultyMetrics"
+          },
+          "similar_texts": {
+            "items": { "$ref": "#/components/schemas/SimilarTextResult" },
+            "type": "array",
+            "title": "Similar Texts"
+          },
+          "num_found": { "type": "integer", "title": "Num Found" }
+        },
+        "type": "object",
+        "required": [
+          "original_text",
+          "difficulty_metrics",
+          "similar_texts",
+          "num_found"
+        ],
+        "title": "TextDifficultyResponse",
+        "description": "Response with difficulty analysis and similar texts."
+      },
+      "TextResearchRequest": {
+        "properties": {
+          "original_text": {
+            "type": "string",
+            "title": "Original Text",
+            "description": "Original Chinese text"
+          },
+          "translated_text": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Translated Text",
+            "description": "English translation (optional)"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "description": "Number of book recommendations",
+            "default": 5
+          },
+          "language": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Language",
+            "description": "Filter by language code (e.g., 'chi', 'eng', 'jpn')"
+          }
+        },
+        "type": "object",
+        "required": ["original_text"],
+        "title": "TextResearchRequest",
+        "description": "Request for researching related books for translated text."
+      },
+      "TextResearchResponse": {
+        "properties": {
+          "original_text": { "type": "string", "title": "Original Text" },
+          "translated_text": { "type": "string", "title": "Translated Text" },
+          "keywords": {
+            "items": { "type": "string" },
+            "type": "array",
+            "title": "Keywords"
+          },
+          "book_recommendations": {
+            "items": { "$ref": "#/components/schemas/BookSummary" },
+            "type": "array",
+            "title": "Book Recommendations"
+          },
+          "num_books_found": { "type": "integer", "title": "Num Books Found" }
+        },
+        "type": "object",
+        "required": [
+          "original_text",
+          "translated_text",
+          "keywords",
+          "book_recommendations",
+          "num_books_found"
+        ],
+        "title": "TextResearchResponse",
+        "description": "Response with translation and book recommendations."
+      },
+      "TranslationRequest": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Text to translate (Chinese)"
+          },
+          "schema_name": {
+            "type": "string",
+            "title": "Schema Name",
+            "description": "Prompting schema to use (e.g., 'translate', 'simple', 'detailed')",
+            "default": "translate"
+          }
+        },
+        "type": "object",
+        "required": ["text"],
+        "title": "TranslationRequest",
+        "description": "Base request for translation operations."
+      },
+      "TranslationResponse": {
+        "properties": {
+          "input_text": { "type": "string", "title": "Input Text" },
+          "translations": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Translations",
+            "description": "Model-specific translations {'qwen': '...', 'claude': '...', 'google': '...'}"
+          },
+          "dictionary_entries": {
+            "anyOf": [
+              {
+                "items": { "$ref": "#/components/schemas/DictionaryEntry" },
+                "type": "array"
+              },
+              { "type": "null" }
+            ],
+            "title": "Dictionary Entries"
+          }
+        },
+        "type": "object",
+        "required": ["input_text", "translations"],
+        "title": "TranslationResponse",
+        "description": "Response from translation endpoint."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": { "anyOf": [{ "type": "string" }, { "type": "integer" }] },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": { "type": "string", "title": "Message" },
+          "type": { "type": "string", "title": "Error Type" },
+          "input": { "title": "Input" },
+          "ctx": { "type": "object", "title": "Context" }
+        },
+        "type": "object",
+        "required": ["loc", "msg", "type"],
+        "title": "ValidationError"
+      },
+      "WordAnalysisRequest": {
+        "properties": {
+          "word": {
+            "type": "string",
+            "title": "Word",
+            "description": "Word to analyze"
+          },
+          "context": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Context",
+            "description": "Context sentence containing the word"
+          },
+          "language": {
+            "type": "string",
+            "title": "Language",
+            "description": "Language code (e.g., 'chi', 'eng', 'jpn')",
+            "default": "chi"
+          },
+          "include_synonyms": {
+            "type": "boolean",
+            "title": "Include Synonyms",
+            "description": "Include synonyms",
+            "default": true
+          },
+          "include_antonyms": {
+            "type": "boolean",
+            "title": "Include Antonyms",
+            "description": "Include antonyms",
+            "default": true
+          },
+          "include_alternatives": {
+            "type": "boolean",
+            "title": "Include Alternatives",
+            "description": "Include alternative wordings",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": ["word"],
+        "title": "WordAnalysisRequest",
+        "description": "Request for word analysis with context."
+      },
+      "WordAnalysisResponse": {
+        "properties": {
+          "word": { "type": "string", "title": "Word" },
+          "context": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Context"
+          },
+          "language": { "type": "string", "title": "Language" },
+          "synonyms": {
+            "items": { "type": "string" },
+            "type": "array",
+            "title": "Synonyms"
+          },
+          "antonyms": {
+            "items": { "type": "string" },
+            "type": "array",
+            "title": "Antonyms"
+          },
+          "alternative_wordings": {
+            "items": { "type": "string" },
+            "type": "array",
+            "title": "Alternative Wordings"
+          },
+          "usage_examples": {
+            "items": { "type": "string" },
+            "type": "array",
+            "title": "Usage Examples"
+          },
+          "explanation": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Explanation"
+          }
+        },
+        "type": "object",
+        "required": ["word", "context", "language"],
+        "title": "WordAnalysisResponse",
+        "description": "Response with word analysis including synonyms, antonyms, and alternatives."
+      }
+    }
+  }
+}
