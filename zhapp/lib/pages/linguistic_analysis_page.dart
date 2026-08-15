@@ -15,9 +15,6 @@ String? _xmlPartial(String buf, String tag) {
   return close == -1 ? buf.substring(start) : buf.substring(start, close);
 }
 
-// Full-screen page for linguistic analysis.
-// User selects/enters a portion of the card's text
-// and the API analyzes sentence structure, grammar patterns, etc.
 class LinguisticAnalysisPage extends StatefulWidget {
   final String fullText;
   final String? selectedText;

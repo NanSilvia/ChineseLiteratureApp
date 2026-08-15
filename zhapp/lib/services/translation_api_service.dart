@@ -16,9 +16,7 @@ class SseEvent {
 }
 
 // Service for calling the Translation Analysis API endpoints.
-///
-// All methods return [ApiResult] following the project convention.
-// Async endpoints are polled automatically until completion.
+
 class TranslationApiService {
   static final TranslationApiService _instance =
       TranslationApiService._internal();
@@ -337,10 +335,6 @@ class TranslationApiService {
       return ApiResult.error('Word analysis error: $e');
     }
   }
-
-  //
-  // LINGUISTIC ANALYSIS (async with polling)
-  //
 
   Future<ApiResult<AsyncJobStatusResponse>> analyzeLinguistic(
     String fullText,

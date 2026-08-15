@@ -4,9 +4,6 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
-// Image cropping widget with 4-point polygon selection.
-// Users drag 4 corners to define an arbitrary quadrilateral region,
-// which is then perspective-corrected (projected) to a rectangle for OCR.
 class ImageCropWidget extends StatefulWidget {
   final String imagePath;
   final Function(File croppedImage)? onCropComplete;

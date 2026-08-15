@@ -209,13 +209,11 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
     final questions = _currentQuestions;
     if (questions.isEmpty) return;
 
-    final correct = _answers.entries
-        .where((e) {
-          final q = questions[e.key];
-          if (q is! Map) return false;
-          return e.value == (q['correct_answer_index'] as int?);
-        })
-        .length;
+    final correct = _answers.entries.where((e) {
+      final q = questions[e.key];
+      if (q is! Map) return false;
+      return e.value == (q['correct_answer_index'] as int?);
+    }).length;
     final total = questions.length;
 
     if (widget.cardId != null && !_sessionSaved) {
@@ -251,7 +249,9 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
                 Icons.psychology,
                 color: _thinkingEnabled
                     ? null
-                    : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3),
+                    : Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withValues(alpha: 0.3),
               ),
               tooltip: _thinkingEnabled
                   ? 'Thinking enabled — tap to disable'
@@ -273,7 +273,8 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
           Expanded(child: _buildBody()),
         ],
       ),
-      floatingActionButton: (_result != null && !_showAnswers && !_showCelebration)
+      floatingActionButton:
+          (_result != null && !_showAnswers && !_showCelebration)
           ? FloatingActionButton.extended(
               onPressed: _revealAnswers,
               icon: const Icon(Icons.visibility),
@@ -390,16 +391,24 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
                 const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(5, (i) => Icon(
-                    i < fullStars ? Icons.star_rounded : Icons.star_outline_rounded,
-                    color: Colors.amber,
-                    size: 36,
-                  )),
+                  children: List.generate(
+                    5,
+                    (i) => Icon(
+                      i < fullStars
+                          ? Icons.star_rounded
+                          : Icons.star_outline_rounded,
+                      color: Colors.amber,
+                      size: 36,
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 20),
                 Text(
                   _congratsMessage(pct),
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                  ),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 40),
@@ -453,9 +462,10 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
 
         final qMap = Map<String, dynamic>.from(q);
         final questionText =
-            qMap['question_prompt'] as String? ??
-            qMap['question'] as String? ??
-            'Question ${index + 1}';
+            (qMap['question_prompt'] as String? ??
+                    qMap['question'] as String? ??
+                    'Question ${index + 1}')
+                .replaceFirst(RegExp(r'^\d+\.\s*'), '');
         final possibleAnswers =
             (qMap['possible_answers'] as List?)
                 ?.map((e) => e.toString())
@@ -467,7 +477,9 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
 
         return Card(
           elevation: 1,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -505,7 +517,10 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
                   const SizedBox(height: 12),
                   ...possibleAnswers.asMap().entries.map((entry) {
                     final optionIndex = entry.key;
-                    final optionText = entry.value;
+                    final optionText = entry.value.replaceFirst(
+                      RegExp(r'^[A-Z]\.\s*'),
+                      '',
+                    );
                     final isCorrect = correctIndex == optionIndex;
                     final isSelected = userSelection == optionIndex;
 
@@ -530,7 +545,8 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
                         borderRadius: BorderRadius.circular(8),
                         onTap: _showAnswers
                             ? null
-                            : () => setState(() => _answers[index] = optionIndex),
+                            : () =>
+                                  setState(() => _answers[index] = optionIndex),
                         child: Container(
                           width: double.infinity,
                           padding: const EdgeInsets.symmetric(
@@ -570,11 +586,17 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
                                 ),
                               ),
                               if (_showAnswers && isCorrect)
-                                Icon(Icons.check_circle,
-                                    color: Colors.green.shade700, size: 20),
+                                Icon(
+                                  Icons.check_circle,
+                                  color: Colors.green.shade700,
+                                  size: 20,
+                                ),
                               if (_showAnswers && isSelected && !isCorrect)
-                                Icon(Icons.cancel,
-                                    color: Colors.red.shade700, size: 20),
+                                Icon(
+                                  Icons.cancel,
+                                  color: Colors.red.shade700,
+                                  size: 20,
+                                ),
                             ],
                           ),
                         ),
@@ -590,4 +612,3 @@ class _QuestionsPageState extends State<QuestionsPage> with ConnectivityAware {
     );
   }
 }
-

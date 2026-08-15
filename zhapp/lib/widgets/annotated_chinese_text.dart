@@ -3,17 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../mandarin_annotator/mandarin_annotator.dart';
 
-/// Displays Chinese text with interactive word-level annotations.
-///
-/// Gesture model:
-///   - **Tap** a word → opens the full word details dialog.
-///   - **Long press** (no drag) → shows a floating quick-preview card with
-///     pinyin and top definitions.
-///   - **Long press + drag** → highlights a word range as you drag; on release
-///     shows a context menu: Copy · Share · Word Analysis · Linguistic Analysis.
-///
-/// [onSelectionChanged] is called with the selected text when a drag-selection
-/// completes, and with `null` when the selection is cleared.
 class AnnotatedChineseText extends StatefulWidget {
   final String text;
   final TextStyle? style;

@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
 
-/// A title text field that glows and pulses while the LLM is generating a title.
-/// When [isGenerating] is true, shows an animated rainbow/aurora glow border and
-/// a shimmer hint text. When done, the generated title populates [controller].
 class GlowingTitleField extends StatefulWidget {
   final TextEditingController controller;
   final bool isGenerating;

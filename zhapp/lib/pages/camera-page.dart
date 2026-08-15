@@ -9,8 +9,6 @@ import '../widgets/image_crop_widget.dart';
 import '../widgets/glowing_title_field.dart';
 
 // Screen 2: Camera OCR (Chinese Text Extraction)
-// Allows user to take a photo, crop it, extract Chinese text using OCR,
-// edit the text, and save it as a new card (online-only save)
 class CameraPage extends StatefulWidget {
   final VoidCallback? onCardSaved;
 

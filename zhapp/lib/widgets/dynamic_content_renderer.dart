@@ -1,9 +1,5 @@
 import 'package:flutter/material.dart';
 
-// Recursively renders dynamic JSON-like data as formatted Flutter widgets.
-///
-// Handles: String, int, double, bool, null, List, `Map<String, dynamic>`,
-// and nested combinations. Avoids calling `.toString()` on complex structures.
 class DynamicContentRenderer extends StatelessWidget {
   final dynamic data;
   final int depth;
